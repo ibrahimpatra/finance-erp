@@ -1,0 +1,77 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: check authenticated user owns the resource
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Helper: new data has correct userId
+    function hasValidUserId(userId) {
+      return request.resource.data.userId == userId;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /settings/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /incomes/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if isOwner(userId);
+      }
+      match /expenses/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if isOwner(userId);
+      }
+      match /spentBy/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if isOwner(userId);
+      }
+      match /tags/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if isOwner(userId);
+      }
+      match /transfers/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if false; // Transfers are immutable once created
+      }
+      match /ledger/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if false; // Ledger entries are IMMUTABLE — single source of truth
+      }
+      match /auditLogs/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if false; // Audit logs are IMMUTABLE
+      }
+      match /monthlySnapshots/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /expenseTypes/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if isOwner(userId);
+      }
+      match /incomeSourceTypes/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if isOwner(userId);
+      }
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

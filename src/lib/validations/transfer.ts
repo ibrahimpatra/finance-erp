@@ -1,0 +1,13 @@
+import { z } from "zod";
+
+export const transferSchema = z.object({
+  fromIncomeId: z.string().min(1, "Source is required"),
+  toIncomeId: z.string().min(1, "Destination is required"),
+  amount: z.coerce.number().positive("Amount must be positive"),
+  note: z.string().max(300).optional(),
+}).refine((d) => d.fromIncomeId !== d.toIncomeId, {
+  message: "Cannot transfer to the same source",
+  path: ["toIncomeId"],
+});
+
+export type TransferSchema = z.infer<typeof transferSchema>;
