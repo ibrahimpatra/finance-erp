@@ -9,33 +9,35 @@ import { useUIStore } from "@/stores/ui.store";
 import { useSettingsStore } from "@/stores/settings.store";
 import { CategoryBreakdown, MonthlyTrend, TagAnalytics } from "@/types";
 import { getLast12Months } from "@/lib/utils/date";
-import { format } from "date-fns";
 
 export function useAnalytics() {
-  const { incomes } = useIncomeStore();
-  const { expenses } = useExpenseStore();
-  const { spentBys } = useSpentByStore();
-  const { tags } = useTagStore();
+  const { incomes }      = useIncomeStore();
+  const { expenses }     = useExpenseStore();
+  const { spentBys }     = useSpentByStore();
+  const { tags }         = useTagStore();
   const { expenseTypes } = useExpenseTypeStore();
   const { dashboardCurrencyFilter } = useUIStore();
-  const { settings } = useSettingsStore();
+  const { settings }     = useSettingsStore();
 
   const defaultCurrency = settings?.currencyCode ?? "KWD";
 
-  // Apply currency filter — records without a currencyCode inherit the default
-  const filteredIncomes = useMemo(() => {
-    if (!dashboardCurrencyFilter) return incomes;
-    return incomes.filter((i) => (i.currencyCode || defaultCurrency) === dashboardCurrencyFilter);
-  }, [incomes, dashboardCurrencyFilter, defaultCurrency]);
+  // Always filter by exactly one currency — either the selected one or the default.
+  // This prevents mixing KWD + USD totals which would be meaningless.
+  const activeCurrency = dashboardCurrencyFilter || defaultCurrency;
 
-  const filteredExpenses = useMemo(() => {
-    if (!dashboardCurrencyFilter) return expenses;
-    return expenses.filter((e) => (e.currencyCode || defaultCurrency) === dashboardCurrencyFilter);
-  }, [expenses, dashboardCurrencyFilter, defaultCurrency]);
+  const filteredIncomes = useMemo(
+    () => incomes.filter((i) => (i.currencyCode || defaultCurrency) === activeCurrency),
+    [incomes, activeCurrency, defaultCurrency]
+  );
 
-  const totalIncome = useMemo(() => filteredIncomes.reduce((a, i) => a + i.amount, 0), [filteredIncomes]);
+  const filteredExpenses = useMemo(
+    () => expenses.filter((e) => (e.currencyCode || defaultCurrency) === activeCurrency),
+    [expenses, activeCurrency, defaultCurrency]
+  );
+
+  const totalIncome   = useMemo(() => filteredIncomes.reduce((a, i) => a + i.amount, 0),   [filteredIncomes]);
   const totalExpenses = useMemo(() => filteredExpenses.reduce((a, e) => a + e.amount, 0), [filteredExpenses]);
-  const totalBalance = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
+  const totalBalance  = useMemo(() => totalIncome - totalExpenses,                          [totalIncome, totalExpenses]);
 
   const categoryBreakdown = useMemo((): CategoryBreakdown[] => {
     const map = new Map<string, { amount: number; count: number }>();
@@ -69,7 +71,7 @@ export function useAnalytics() {
 
   const monthlyTrend = useMemo((): MonthlyTrend[] => {
     return getLast12Months().map(({ start, end, label }) => {
-      const monthIncome = filteredIncomes
+      const monthIncome   = filteredIncomes
         .filter((i) => { const d = i.createdAt.toDate(); return d >= start && d <= end; })
         .reduce((a, i) => a + i.amount, 0);
       const monthExpenses = filteredExpenses
@@ -81,32 +83,23 @@ export function useAnalytics() {
 
   const tagAnalytics = useMemo((): TagAnalytics[] => {
     return tags.map((tag) => {
-      const incomeCount = filteredIncomes.filter((i) => i.tagIds.includes(tag.id)).length;
-      const tagExpenses = filteredExpenses.filter((e) => e.tagIds.includes(tag.id));
+      const incomeCount  = filteredIncomes.filter((i) => i.tagIds.includes(tag.id)).length;
+      const tagExpenses  = filteredExpenses.filter((e) => e.tagIds.includes(tag.id));
       const expenseCount = tagExpenses.length;
-      const totalAmount = tagExpenses.reduce((a, e) => a + e.amount, 0);
-      return {
-        tagId: tag.id,
-        tagName: tag.name,
-        color: tag.color,
-        incomeCount,
-        expenseCount,
-        totalAmount,
-        usageCount: incomeCount + expenseCount,
-      };
+      const totalAmount  = tagExpenses.reduce((a, e) => a + e.amount, 0);
+      return { tagId: tag.id, tagName: tag.name, color: tag.color, incomeCount, expenseCount, totalAmount, usageCount: incomeCount + expenseCount };
     }).sort((a, b) => b.usageCount - a.usageCount);
   }, [tags, filteredIncomes, filteredExpenses]);
-
-  const topSpender = useMemo(() => spendingByPerson[0] ?? null, [spendingByPerson]);
-  const topCategory = useMemo(() => categoryBreakdown[0] ?? null, [categoryBreakdown]);
 
   return {
     totalIncome, totalExpenses, totalBalance,
     categoryBreakdown, spendingByPerson, monthlyTrend, tagAnalytics,
-    topSpender, topCategory,
-    incomeCount: filteredIncomes.length,
+    activeCurrency,
+    topSpender:   spendingByPerson[0] ?? null,
+    topCategory:  categoryBreakdown[0] ?? null,
+    incomeCount:  filteredIncomes.length,
     expenseCount: filteredExpenses.length,
     spentByCount: spentBys.length,
-    tagCount: tags.length,
+    tagCount:     tags.length,
   };
 }
