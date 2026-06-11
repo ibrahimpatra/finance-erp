@@ -1,9 +1,12 @@
 "use client";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { useCurrency } from "@/hooks/use-currency";
-import { CurrencyDisplay } from "@/components/shared/currency-display";
+import { useUIStore } from "@/stores/ui.store";
 import { StatsGridSkeleton } from "@/components/shared/loading-skeleton";
-import { TrendingUp, Receipt, Wallet, BarChart2, Tag, Users, ArrowLeftRight, Trophy } from "lucide-react";
+import {
+  TrendingUp, Receipt, Wallet, BarChart2,
+  Tag, Users, ArrowLeftRight, Trophy,
+} from "lucide-react";
 import { useIncomeStore } from "@/stores/income.store";
 
 export function StatsCards() {
@@ -14,6 +17,7 @@ export function StatsCards() {
     topSpender, topCategory,
   } = useAnalytics();
   const { format } = useCurrency();
+  const { dashboardCurrencyFilter } = useUIStore();
 
   if (loading) return <StatsGridSkeleton />;
 
@@ -22,82 +26,94 @@ export function StatsCards() {
       label: "Total Income",
       value: format(totalIncome),
       icon: TrendingUp,
-      color: "text-blue-500 bg-blue-50",
+      iconCls: "text-blue-500 bg-blue-50",
+      bar: "bg-blue-400",
       sub: `${incomeCount} source${incomeCount !== 1 ? "s" : ""}`,
-      trend: null,
     },
     {
       label: "Total Expenses",
       value: format(totalExpenses),
       icon: Receipt,
-      color: "text-red-500 bg-red-50",
-      sub: `${expenseCount} transaction${expenseCount !== 1 ? "s" : ""}`,
-      trend: null,
+      iconCls: "text-red-500 bg-red-50",
+      bar: "bg-red-400",
+      sub: `${expenseCount} tx`,
     },
     {
       label: "Net Balance",
       value: format(totalBalance),
       icon: Wallet,
-      color: totalBalance >= 0 ? "text-emerald-500 bg-emerald-50" : "text-red-500 bg-red-50",
+      iconCls: totalBalance >= 0 ? "text-emerald-500 bg-emerald-50" : "text-red-500 bg-red-50",
+      bar: totalBalance >= 0 ? "bg-emerald-400" : "bg-red-400",
       sub: totalBalance >= 0 ? "Surplus" : "Deficit",
-      trend: null,
     },
     {
-      label: "Income Sources",
-      value: incomeCount.toString(),
+      label: "Spend Rate",
+      value: totalIncome > 0
+        ? `${Math.min(100, Math.round((totalExpenses / totalIncome) * 100))}%`
+        : "—",
       icon: BarChart2,
-      color: "text-indigo-500 bg-indigo-50",
-      sub: "Active sources",
-      trend: null,
-    },
-    {
-      label: "Spent By",
-      value: spentByCount.toString(),
-      icon: Users,
-      color: "text-purple-500 bg-purple-50",
-      sub: "People tracked",
-      trend: null,
-    },
-    {
-      label: "Tags",
-      value: tagCount.toString(),
-      icon: Tag,
-      color: "text-teal-500 bg-teal-50",
-      sub: "Labels created",
-      trend: null,
+      iconCls: "text-indigo-500 bg-indigo-50",
+      bar: "bg-indigo-400",
+      sub: "of income used",
     },
     {
       label: "Top Spender",
       value: topSpender?.name ?? "—",
       icon: Trophy,
-      color: "text-amber-500 bg-amber-50",
+      iconCls: "text-amber-500 bg-amber-50",
+      bar: "bg-amber-400",
       sub: topSpender ? format(topSpender.amount) : "No data",
-      trend: null,
     },
     {
       label: "Top Category",
       value: topCategory?.categoryName ?? "—",
       icon: ArrowLeftRight,
-      color: "text-rose-500 bg-rose-50",
+      iconCls: "text-rose-500 bg-rose-50",
+      bar: "bg-rose-400",
       sub: topCategory ? format(topCategory.amount) : "No data",
-      trend: null,
+    },
+    {
+      label: "People",
+      value: spentByCount.toString(),
+      icon: Users,
+      iconCls: "text-purple-500 bg-purple-50",
+      bar: "bg-purple-400",
+      sub: "tracked",
+    },
+    {
+      label: "Tags",
+      value: tagCount.toString(),
+      icon: Tag,
+      iconCls: "text-teal-500 bg-teal-50",
+      bar: "bg-teal-400",
+      sub: "labels",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
       {cards.map((card) => (
-        <div key={card.label} className="stat-card group">
-          <div className="flex items-start justify-between mb-3">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${card.color}`}>
-              <card.icon className="w-4 h-4" />
+        <div key={card.label}
+          className="bg-white rounded-lg border border-border flex items-center gap-2.5 px-3 py-2.5 hover:shadow-sm transition-shadow">
+          {/* Icon */}
+          <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${card.iconCls}`}>
+            <card.icon className="w-3.5 h-3.5" />
+          </div>
+          {/* Text */}
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-medium text-muted-foreground leading-none mb-0.5">
+              {card.label}
+              {dashboardCurrencyFilter && (
+                <span className="ml-1 opacity-60">· {dashboardCurrencyFilter}</span>
+              )}
+            </div>
+            <div className="text-sm font-bold text-foreground leading-tight truncate amount-display">
+              {card.value}
+            </div>
+            <div className="text-[10px] text-muted-foreground/70 leading-none mt-0.5 truncate">
+              {card.sub}
             </div>
           </div>
-          <div className="amount-display text-xl font-bold text-foreground leading-none mb-1 truncate">
-            {card.value}
-          </div>
-          <div className="text-xs text-muted-foreground">{card.label}</div>
-          <div className="text-xs text-muted-foreground/70 mt-0.5">{card.sub}</div>
         </div>
       ))}
     </div>

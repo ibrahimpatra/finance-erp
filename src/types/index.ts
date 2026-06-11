@@ -19,6 +19,19 @@ export interface Settings {
   updatedAt: Timestamp;
 }
 
+// ─── Multi-Currency ──────────────────────────────────────────────
+export interface Currency {
+  id: string;
+  userId: string;
+  name: string;
+  code: string;
+  symbol: string;
+  isDefault: boolean;
+  createdAt: Timestamp;
+}
+
+export type CurrencyFormData = Omit<Currency, "id" | "userId" | "createdAt">;
+
 export interface Income {
   id: string;
   userId: string;
@@ -27,6 +40,7 @@ export interface Income {
   amount: number;
   notes?: string;
   tagIds: string[];
+  currencyCode?: string; // multi-currency support
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -41,6 +55,7 @@ export interface Expense {
   notes?: string;
   expenseTypeId: string;
   tagIds: string[];
+  currencyCode?: string; // multi-currency support
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -71,7 +86,10 @@ export interface Transfer {
   userId: string;
   fromIncomeId: string;
   toIncomeId: string;
-  amount: number;
+  amount: number;          // amount deducted from source (in fromCurrencyCode)
+  toAmount?: number;       // amount credited to destination (in toCurrencyCode); equals amount for same-currency
+  fromCurrencyCode?: string;
+  toCurrencyCode?: string;
   note?: string;
   createdAt: Timestamp;
 }
@@ -286,4 +304,20 @@ export const DEFAULT_INCOME_SOURCE_TYPES = [
   { name: "Freelance",     icon: "💻", color: "#06b6d4" },
   { name: "Rental Income", icon: "🏠", color: "#f97316" },
   { name: "Other",         icon: "📦", color: "#6b7280" },
+] as const;
+
+// ─── Preset Currencies ───────────────────────────────────────────
+export const PRESET_CURRENCIES = [
+  { name: "Kuwaiti Dinar", code: "KWD", symbol: "KD" },
+  { name: "US Dollar", code: "USD", symbol: "$" },
+  { name: "Euro", code: "EUR", symbol: "€" },
+  { name: "British Pound", code: "GBP", symbol: "£" },
+  { name: "UAE Dirham", code: "AED", symbol: "AED" },
+  { name: "Saudi Riyal", code: "SAR", symbol: "SAR" },
+  { name: "Bahraini Dinar", code: "BHD", symbol: "BD" },
+  { name: "Qatari Riyal", code: "QAR", symbol: "QAR" },
+  { name: "Omani Rial", code: "OMR", symbol: "OMR" },
+  { name: "Japanese Yen", code: "JPY", symbol: "¥" },
+  { name: "Indian Rupee", code: "INR", symbol: "₹" },
+  { name: "Canadian Dollar", code: "CAD", symbol: "CA$" },
 ] as const;

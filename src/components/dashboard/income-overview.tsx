@@ -1,53 +1,73 @@
 "use client";
 import { useIncome } from "@/hooks/use-income";
 import { useCurrency } from "@/hooks/use-currency";
+import { useUIStore } from "@/stores/ui.store";
+import { useSettingsStore } from "@/stores/settings.store";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
-import { EmptyState } from "@/components/shared/empty-state";
 import Link from "next/link";
 import { TrendingUp, ExternalLink } from "lucide-react";
 
 export function IncomeOverview() {
   const { incomes, loading } = useIncome();
-  const { format } = useCurrency();
+  const { formatFor } = useCurrency();
+  const { dashboardCurrencyFilter } = useUIStore();
+  const { settings } = useSettingsStore();
+  const defaultCurrency = settings?.currencyCode ?? "KWD";
 
-  if (loading) return <TableSkeleton rows={3} />;
+  if (loading) return <TableSkeleton rows={4} />;
+
+  const filtered = dashboardCurrencyFilter
+    ? incomes.filter((i) => (i.currencyCode || defaultCurrency) === dashboardCurrencyFilter)
+    : incomes;
 
   return (
-    <div className="bg-white rounded-xl border border-border overflow-hidden shadow-card">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-        <h2 className="font-semibold text-foreground">Income Sources</h2>
-        <Link href="/income" className="text-xs text-primary hover:underline flex items-center gap-1">
+    <div className="bg-white rounded-lg border border-border overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+        <span className="text-xs font-semibold text-foreground">Income Sources</span>
+        <Link href="/income" className="text-[10px] text-primary hover:underline flex items-center gap-1">
           View all <ExternalLink className="w-3 h-3" />
         </Link>
       </div>
-      {incomes.length === 0 ? (
-        <EmptyState icon={TrendingUp} title="No income yet" description="Add your first income source to get started." />
+
+      {filtered.length === 0 ? (
+        <div className="px-4 py-5 text-center text-xs text-muted-foreground">
+          {dashboardCurrencyFilter ? `No incomes in ${dashboardCurrencyFilter}` : "No income sources yet"}
+        </div>
       ) : (
         <div className="divide-y divide-border">
-          {incomes.slice(0, 5).map((income) => (
-            <Link key={income.id} href={`/income/${income.id}`}
-              className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors group">
-              <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                <TrendingUp className="w-4 h-4 text-blue-500" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-sm font-medium text-foreground truncate">{income.name}</span>
-                  <span className="text-xs text-muted-foreground shrink-0">{income.source}</span>
+          {filtered.slice(0, 6).map((income) => {
+            const cur = income.currencyCode || defaultCurrency;
+            return (
+              <Link key={income.id} href={`/income/${income.id}`}
+                className="flex items-center gap-2.5 px-4 py-2 hover:bg-muted/40 transition-colors">
+                <div className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center shrink-0">
+                  <TrendingUp className="w-3 h-3 text-blue-500" />
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="progress-gradient h-full" style={{ width: `${income.percentageUsed}%` }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium text-foreground truncate">{income.name}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{income.source}</span>
+                    {cur !== defaultCurrency && (
+                      <span className="text-[10px] px-1 rounded bg-blue-50 text-blue-600 font-semibold shrink-0">{cur}</span>
+                    )}
                   </div>
-                  <span className="text-xs text-muted-foreground shrink-0">{income.percentageUsed}% used</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden max-w-[80px]">
+                      <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"
+                        style={{ width: `${income.percentageUsed}%` }} />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{income.percentageUsed}%</span>
+                  </div>
                 </div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className="amount-display text-sm font-semibold text-foreground">{format(income.balance)}</div>
-                <div className="text-xs text-muted-foreground">remaining</div>
-              </div>
-            </Link>
-          ))}
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-bold text-foreground amount-display">
+                    {formatFor(income.balance, cur)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">left</div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
