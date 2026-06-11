@@ -26,11 +26,12 @@ export async function createLedgerEntry(params: CreateLedgerEntryParams): Promis
   return ref.id;
 }
 
+// NOTE: Removed orderBy to avoid composite index requirement.
+// Balance calculation doesn't need ordered results.
 export async function getLedgerForIncome(userId: string, incomeSourceId: string): Promise<LedgerEntry[]> {
   const q = query(
     collection(db, COLLECTIONS.LEDGER(userId)),
-    where("incomeSourceId", "==", incomeSourceId),
-    orderBy("createdAt", "asc")
+    where("incomeSourceId", "==", incomeSourceId)
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LedgerEntry));

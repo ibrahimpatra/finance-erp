@@ -8,6 +8,7 @@ export const expenseSchema = z.object({
   notes: z.string().max(500).optional(),
   expenseTypeId: z.string().min(1, "Category is required"),
   tagIds: z.array(z.string()).default([]),
+  currencyCode: z.string().optional(),
 });
 
 export type ExpenseSchema = z.infer<typeof expenseSchema>;

@@ -6,6 +6,7 @@ export const incomeSchema = z.object({
   amount: z.coerce.number().positive("Amount must be positive"),
   notes: z.string().max(500).optional(),
   tagIds: z.array(z.string()).default([]),
+  currencyCode: z.string().optional(),
 });
 
 export type IncomeSchema = z.infer<typeof incomeSchema>;

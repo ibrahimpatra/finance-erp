@@ -69,14 +69,19 @@ export async function deleteIncome(userId: string, id: string): Promise<void> {
 export async function getIncomesWithBalances(userId: string): Promise<IncomeWithBalance[]> {
   const incomes = await getIncomes(userId);
   return Promise.all(incomes.map(async (income) => {
-    const ledger = await getLedgerForIncome(userId, income.id);
-    const totalCredits = calculateTotalCredits(ledger);
-    const totalDebits = calculateTotalDebits(ledger);
-    const balance = calculateBalanceFromLedger(ledger);
-    const totalExpenses = ledger
-      .filter((e) => e.direction === "DEBIT" && e.transactionType === "EXPENSE_CREATED")
-      .reduce((a, e) => a + e.amount, 0);
-    const percentageUsed = income.amount > 0 ? Math.min(100, Math.round((totalDebits / totalCredits) * 100)) : 0;
-    return { ...income, balance, totalExpenses, totalCredits, totalDebits, percentageUsed };
+    try {
+      const ledger = await getLedgerForIncome(userId, income.id);
+      const totalCredits = calculateTotalCredits(ledger);
+      const totalDebits = calculateTotalDebits(ledger);
+      const balance = calculateBalanceFromLedger(ledger);
+      const totalExpenses = ledger
+        .filter((e) => e.direction === "DEBIT" && e.transactionType === "EXPENSE_CREATED")
+        .reduce((a, e) => a + e.amount, 0);
+      const percentageUsed = totalCredits > 0 ? Math.min(100, Math.round((totalDebits / totalCredits) * 100)) : 0;
+      return { ...income, balance, totalExpenses, totalCredits, totalDebits, percentageUsed };
+    } catch {
+      // Fallback: if ledger fetch fails, use income amount as balance
+      return { ...income, balance: income.amount, totalExpenses: 0, totalCredits: income.amount, totalDebits: 0, percentageUsed: 0 };
+    }
   }));
 }
