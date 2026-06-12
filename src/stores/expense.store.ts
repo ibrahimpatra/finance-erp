@@ -16,11 +16,21 @@ interface ExpenseStore {
   setFilters: (filters: ExpenseFilters) => void;
 }
 
+async function refreshIncomes(userId: string) {
+  try {
+    const { getIncomesWithBalances } = await import("@/services/income.service");
+    const { useIncomeStore } = await import("@/stores/income.store");
+    const incomes = await getIncomesWithBalances(userId);
+    useIncomeStore.setState({ incomes });
+  } catch { /* non-critical */ }
+}
+
 export const useExpenseStore = create<ExpenseStore>((set, get) => ({
   expenses: [],
   loading: false,
   error: null,
   filters: {},
+
   fetchExpenses: async (userId, filters) => {
     set({ loading: true, error: null });
     try {
@@ -31,25 +41,32 @@ export const useExpenseStore = create<ExpenseStore>((set, get) => ({
       set({ error: (e as Error).message, loading: false });
     }
   },
+
   addExpense: async (userId, data) => {
     const id = await createExpense(userId, data);
-    await get().fetchExpenses(userId);
+    await Promise.all([get().fetchExpenses(userId), refreshIncomes(userId)]);
     return id;
   },
+
   editExpense: async (userId, id, data, old) => {
     await updateExpense(userId, id, data, old);
-    await get().fetchExpenses(userId);
+    await Promise.all([get().fetchExpenses(userId), refreshIncomes(userId)]);
   },
+
   removeExpense: async (userId, id, expense) => {
     await deleteExpense(userId, id, expense);
-    await get().fetchExpenses(userId);
+    await Promise.all([get().fetchExpenses(userId), refreshIncomes(userId)]);
   },
+
   refundExpense: async (userId, expense, amount, reason) => {
     await createRefund(userId, expense, amount, reason);
+    await refreshIncomes(userId);
   },
+
   reassign: async (userId, expense, newIncomeId) => {
     await reassignExpense(userId, expense, newIncomeId);
-    await get().fetchExpenses(userId);
+    await Promise.all([get().fetchExpenses(userId), refreshIncomes(userId)]);
   },
+
   setFilters: (filters) => set({ filters }),
 }));
