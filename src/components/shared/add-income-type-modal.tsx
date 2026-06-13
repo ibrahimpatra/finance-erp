@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Modal } from "./modal";
 import { useAuthStore } from "@/stores/auth.store";
 import { useIncomeSourceTypeStore } from "@/stores/income-source-type.store";
+import { ColorPickerInput } from "./color-picker-input";
 import { Loader2 } from "lucide-react";
 
 interface Props {
@@ -12,37 +13,32 @@ interface Props {
   level?: 1 | 2 | 3;
 }
 
-const inp = "w-full px-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all";
-
+const inp = "w-full px-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all";
 const QUICK_ICONS = ["💼","🎁","🏢","💰","📈","💻","🏠","📦","💳","🌐","🎯","🔧"];
 
 export function AddIncomeTypeModal({ isOpen, onClose, onCreated, level = 1 }: Props) {
   const { user } = useAuthStore();
   const { addSourceType } = useIncomeSourceTypeStore();
 
-  const [name, setName]   = useState("");
-  const [icon, setIcon]   = useState("💼");
-  const [color, setColor] = useState("#3b82f6");
+  const [name,   setName]   = useState("");
+  const [icon,   setIcon]   = useState("💼");
+  const [color,  setColor]  = useState("#3b82f6");
   const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState("");
+  const [error,  setError]  = useState("");
 
   const reset = () => { setName(""); setIcon("💼"); setColor("#3b82f6"); setError(""); };
 
   const handleSave = async () => {
     if (!user) return;
     if (!name.trim()) { setError("Name is required"); return; }
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     try {
       const id = await addSourceType(user.uid, { name: name.trim(), icon, color, isActive: true });
       onCreated?.({ id, name: name.trim() });
-      reset();
-      onClose();
+      reset(); onClose();
     } catch (e: unknown) {
       setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -68,19 +64,12 @@ export function AddIncomeTypeModal({ isOpen, onClose, onCreated, level = 1 }: Pr
               </button>
             ))}
           </div>
-          <input value={icon} onChange={(e) => setIcon(e.target.value)}
-            placeholder="Or type any emoji" className={inp + " text-lg"} />
+          <input value={icon} onChange={(e) => setIcon(e.target.value)} placeholder="Or type any emoji"
+            className={inp + " text-lg"} />
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">Color</label>
-          <div className="flex items-center gap-3">
-            <input type="color" value={color} onChange={(e) => setColor(e.target.value)}
-              className="w-10 h-10 rounded-lg border border-input cursor-pointer p-0.5" />
-            <input value={color} onChange={(e) => setColor(e.target.value)} placeholder="#3b82f6"
-              className={inp + " font-mono"} />
-          </div>
-        </div>
+        {/* ── react-colorful color picker ── */}
+        <ColorPickerInput label="Color" value={color} onChange={setColor} />
 
         <div className="flex gap-3 pt-1">
           <button type="button" onClick={handleClose}

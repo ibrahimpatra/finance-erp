@@ -1,16 +1,12 @@
 "use client";
 import { useAuthStore } from "@/stores/auth.store";
-import { useUIStore } from "@/stores/ui.store";
-import { Sidebar } from "@/components/layout/sidebar";
-import { Header } from "@/components/layout/header";
+import { Navbar } from "@/components/layout/navbar";
 import { QuickAddFAB } from "@/components/expenses/quick-add-fab";
 import { CommandPalette } from "@/components/shared/command-palette";
-import { cn } from "@/lib/utils/helpers";
 import { Loader2 } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { loading } = useAuthStore();
-  const { sidebarOpen } = useUIStore();
 
   if (loading) {
     return (
@@ -25,16 +21,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar />
-      <div className={cn(
-        "transition-all duration-300",
-        sidebarOpen ? "ml-[var(--sidebar-width)]" : "ml-16"
-      )}>
-        <Header />
-        <main className="p-6 min-h-[calc(100vh-var(--header-height))]">
+      <Navbar />
+      <main className="pt-[var(--navbar-height)]">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-[calc(100vh-var(--navbar-height))]">
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
       <QuickAddFAB />
       <CommandPalette />
     </div>

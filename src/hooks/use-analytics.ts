@@ -20,10 +20,7 @@ export function useAnalytics() {
   const { settings }     = useSettingsStore();
 
   const defaultCurrency = settings?.currencyCode ?? "KWD";
-
-  // Always filter by exactly one currency — either the selected one or the default.
-  // This prevents mixing KWD + USD totals which would be meaningless.
-  const activeCurrency = dashboardCurrencyFilter || defaultCurrency;
+  const activeCurrency  = dashboardCurrencyFilter || defaultCurrency;
 
   const filteredIncomes = useMemo(
     () => incomes.filter((i) => (i.currencyCode || defaultCurrency) === activeCurrency),
@@ -35,9 +32,18 @@ export function useAnalytics() {
     [expenses, activeCurrency, defaultCurrency]
   );
 
+  // totalIncome = sum of initial income amounts (what was received)
   const totalIncome   = useMemo(() => filteredIncomes.reduce((a, i) => a + i.amount, 0),   [filteredIncomes]);
   const totalExpenses = useMemo(() => filteredExpenses.reduce((a, e) => a + e.amount, 0), [filteredExpenses]);
-  const totalBalance  = useMemo(() => totalIncome - totalExpenses,                          [totalIncome, totalExpenses]);
+
+  // ── FIX: totalBalance uses ledger-computed balance (accounts for transfers) ──
+  // income.balance comes from calculateBalanceFromLedger which includes CREDIT
+  // (income added, transfers in) minus DEBIT (expenses, transfers out).
+  // This correctly deducts amounts that have been transferred away.
+  const totalBalance = useMemo(
+    () => filteredIncomes.reduce((a, i) => a + i.balance, 0),
+    [filteredIncomes]
+  );
 
   const categoryBreakdown = useMemo((): CategoryBreakdown[] => {
     const map = new Map<string, { amount: number; count: number }>();

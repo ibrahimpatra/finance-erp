@@ -6,35 +6,37 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 220 20% 10%;
+    --background: 220 20% 97%;
+    --foreground: 220 25% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 10%;
+    --card-foreground: 220 25% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 10%;
+    --popover-foreground: 220 25% 10%;
     --primary: 217 91% 50%;
     --primary-foreground: 0 0% 100%;
     --secondary: 220 14% 96%;
     --secondary-foreground: 220 20% 20%;
     --muted: 220 14% 96%;
-    --muted-foreground: 220 10% 50%;
+    --muted-foreground: 220 10% 52%;
     --accent: 217 91% 97%;
     --accent-foreground: 217 91% 35%;
     --destructive: 0 84% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
     --ring: 217 91% 50%;
     --radius: 0.625rem;
+    --navbar-height: 56px;
+    --header-height: 56px;
     --sidebar-width: 260px;
-    --header-height: 64px;
   }
 
   * { @apply border-border; }
 
   html {
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: 'Inter', 'DM Sans', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
@@ -44,15 +46,18 @@
 }
 
 @layer components {
+
+  /* ── Stat cards ─────────────────────────────────────────── */
   .stat-card {
-    @apply bg-white rounded-xl border border-border p-5 shadow-card hover:shadow-card-hover transition-shadow duration-200;
+    @apply bg-white rounded-xl border border-border p-5 shadow-card hover:shadow-card-hover transition-all duration-200;
   }
 
+  /* ── Page header ─────────────────────────────────────────── */
   .page-header {
-    @apply flex items-center justify-between pb-6 border-b border-border mb-6;
+    @apply flex items-center justify-between pb-5 mb-6 border-b border-border;
   }
 
-  /* ── Beautiful number font ───────────────────────────────────────────────── */
+  /* ── Amount font ─────────────────────────────────────────── */
   .amount-display {
     font-family: 'Space Grotesk', sans-serif;
     font-variant-numeric: tabular-nums;
@@ -61,39 +66,83 @@
     font-weight: 600;
   }
 
+  /* ── Tag badge ───────────────────────────────────────────── */
   .badge-tag {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
   }
 
+  /* ── Shadows ─────────────────────────────────────────────── */
   .shadow-card {
-    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.04);
   }
-
   .shadow-card-hover {
-    box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.05);
+    box-shadow: 0 4px 16px 0 rgb(0 0 0 / 0.08), 0 2px 6px -1px rgb(0 0 0 / 0.05);
+  }
+  .shadow-drawer {
+    box-shadow: -8px 0 32px 0 rgb(0 0 0 / 0.12);
   }
 
+  /* ── Navbar nav item ─────────────────────────────────────── */
+  .nav-item {
+    @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-muted/80;
+  }
+  .nav-item.active {
+    @apply text-primary bg-primary/10 hover:bg-primary/10;
+  }
+
+  /* ── Legacy sidebar nav-link (kept for compatibility) ──────── */
+  .nav-link {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-muted/80;
+  }
+  .nav-link.active {
+    @apply text-primary bg-primary/10;
+  }
+
+  /* ── Progress bar ────────────────────────────────────────── */
   .progress-gradient {
     background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
     border-radius: 9999px;
     transition: width 0.5s ease;
   }
 
+  /* ── Animations ──────────────────────────────────────────── */
   .animate-fade-in {
-    animation: fadeIn 0.2s ease-out;
+    animation: fadeIn 0.25s ease-out;
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
+    from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
+  /* ── Form input ──────────────────────────────────────────── */
+  .form-input {
+    @apply w-full px-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all;
+  }
+
+  /* ── Scrollbar ───────────────────────────────────────────── */
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--border)) transparent;
   }
-
   .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
   .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-  .scrollbar-thin::-webkit-scrollbar-thumb { background-color: hsl(var(--border)); border-radius: 9999px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+
+  /* ── Color picker override ───────────────────────────────── */
+  .react-colorful {
+    width: 100% !important;
+    height: 180px !important;
+  }
+  .react-colorful__saturation {
+    border-radius: 8px 8px 0 0 !important;
+  }
+  .react-colorful__hue {
+    height: 14px !important;
+    border-radius: 0 0 8px 8px !important;
+    margin-top: 6px !important;
+  }
 }
