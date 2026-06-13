@@ -9,7 +9,7 @@ import { createLedgerEntry } from "./ledger.service";
 import { logAudit } from "./audit.service";
 
 export async function getExpenses(userId: string, filters?: ExpenseFilters): Promise<Expense[]> {
-  const q = query(collection(db, COLLECTIONS.EXPENSES(userId)), orderBy("createdAt", "desc"));
+  let q = query(collection(db, COLLECTIONS.EXPENSES(userId)), orderBy("createdAt", "desc"));
   const snap = await getDocs(q);
   let expenses = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Expense));
 
