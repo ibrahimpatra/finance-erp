@@ -9,13 +9,14 @@ import { useExpenseTypes } from "@/hooks/use-expense-types";
 import { useCurrencies } from "@/hooks/use-currencies";
 import { useUIStore } from "@/stores/ui.store";
 import { useSettingsStore } from "@/stores/settings.store";
+import { useCurrencyStore } from "@/stores/currency.store";
 import { useIncomeStore } from "@/stores/income.store";
 import { useExpenseStore } from "@/stores/expense.store";
-import { useCurrencyStore } from "@/stores/currency.store";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { IncomeOverview } from "@/components/dashboard/income-overview";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { ExpensePieChart, MonthlyTrendChart, SpendingByPersonChart } from "@/components/dashboard/expense-chart";
+import { GlobalCurrencyFilter } from "@/components/shared/global-currency-filter";
 
 export function DashboardClient() {
   useIncome();
@@ -30,25 +31,30 @@ export function DashboardClient() {
   const { expenses }   = useExpenseStore();
   const { currencies } = useCurrencyStore();
   const { settings }   = useSettingsStore();
-  const { dashboardCurrencyFilter, setDashboardCurrencyFilter } = useUIStore();
+  const {
+    globalCurrencies, setGlobalCurrencies,
+    dashboardCurrencyFilter, setDashboardCurrencyFilter,
+  } = useUIStore();
 
   const defaultCode = settings?.currencyCode ?? "KWD";
 
+  // On first load, default to the settings currency if nothing selected
   useEffect(() => {
-    if (!dashboardCurrencyFilter) setDashboardCurrencyFilter(defaultCode);
+    if (!dashboardCurrencyFilter) {
+      setDashboardCurrencyFilter(defaultCode);
+    }
   }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const usedCodes = Array.from(new Set([
-    defaultCode,
-    ...incomes.map((i) => i.currencyCode || defaultCode),
-    ...expenses.map((e) => e.currencyCode || defaultCode),
-  ])).filter(Boolean);
-
-  const filterCodes = Array.from(new Set([
-    defaultCode,
-    ...currencies.map((c) => c.code),
-    ...usedCodes,
-  ]));
+  // When global filter is "All" or has multiple selections, keep dashboardCurrencyFilter
+  // pointing to the first selection (or default) for useAnalytics compat
+  useEffect(() => {
+    if (globalCurrencies.length === 0) {
+      // "All" selected — keep dashboardCurrencyFilter at default
+      setDashboardCurrencyFilter(defaultCode);
+    } else {
+      setDashboardCurrencyFilter(globalCurrencies[0]);
+    }
+  }, [globalCurrencies, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeCurrency = dashboardCurrencyFilter || defaultCode;
 
@@ -56,37 +62,25 @@ export function DashboardClient() {
     <div className="space-y-6 animate-fade-in">
 
       {/* ── Page header ──────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Overview</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Viewing <span className="font-semibold text-foreground">{activeCurrency}</span> · select a currency to switch view
+            {globalCurrencies.length === 1
+              ? `Viewing ${activeCurrency}`
+              : globalCurrencies.length > 1
+              ? `Viewing ${globalCurrencies.join(", ")}`
+              : "Viewing all currencies"}
           </p>
         </div>
-
-        {/* Currency pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground">Currency:</span>
-          {filterCodes.map((code) => (
-            <button
-              key={code}
-              onClick={() => setDashboardCurrencyFilter(code)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                activeCurrency === code
-                  ? "bg-primary text-white border-primary shadow-sm shadow-primary/20"
-                  : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              {code}
-            </button>
-          ))}
-        </div>
+        {/* Global currency filter chips */}
+        <GlobalCurrencyFilter />
       </div>
 
       {/* ── Stats ────────────────────────────────────────────── */}
       <StatsCards />
 
-      {/* ── Income + Recent side by side ─────────────────────── */}
+      {/* ── Income + Recent ──────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <IncomeOverview />
         <RecentTransactions />

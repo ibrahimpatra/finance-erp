@@ -6,28 +6,33 @@ import { tagSchema, TagSchema } from "@/lib/validations/tag";
 import { useTags } from "@/hooks/use-tags";
 import { useExpenses } from "@/hooks/use-expenses";
 import { useIncome } from "@/hooks/use-income";
+import { useCurrencies } from "@/hooks/use-currencies";
 import { useAuthStore } from "@/stores/auth.store";
 import { useTagStore } from "@/stores/tag.store";
+import { useSettingsStore } from "@/stores/settings.store";
 import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { FormDrawer } from "@/components/shared/form-drawer";
-import { ColorPickerInput } from "@/components/shared/color-picker-input";
+import { TagForm } from "@/components/shared/tag-form";
+import { GlobalCurrencyFilter, useCurrencyFilter } from "@/components/shared/global-currency-filter";
+import { MultiCurrencyAmount, groupByCurrency } from "@/components/shared/multi-currency-amount";
 import { TAG_COLORS, Tag } from "@/types";
-import { Tag as TagIcon, Plus, Loader2, Edit3, Trash2 } from "lucide-react";
-
-const inp = "w-full px-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all";
+import { Tag as TagIcon, Plus, Edit3, Trash2 } from "lucide-react";
 
 export function TagsPageClient() {
   const { user }     = useAuthStore();
   const { tags, loading } = useTags();
   const { expenses } = useExpenses();
   const { incomes }  = useIncome();
+  const { settings } = useSettingsStore();
+  const defaultCode  = settings?.currencyCode ?? "KWD";
+  useCurrencies();
   const { addTag, editTag, removeTag } = useTagStore();
-  const { format }   = useCurrency();
-  const { toast }    = useToast();
+  const { toast }      = useToast();
+  const { matches: matchesCurrency } = useCurrencyFilter();
 
   const [showForm,     setShowForm]     = useState(false);
   const [editTarget,   setEditTarget]   = useState<Tag | null>(null);
@@ -35,21 +40,20 @@ export function TagsPageClient() {
   const [deleting,     setDeleting]     = useState(false);
   const [selectedColor, setSelectedColor] = useState<string>(TAG_COLORS[0]);
 
-  const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } =
-    useForm<TagSchema>({
-      resolver: zodResolver(tagSchema),
-      defaultValues: { color: TAG_COLORS[0] },  // ← fix: provide default so zod validation passes
-    });
+  const tagForm = useForm<TagSchema>({
+    resolver: zodResolver(tagSchema),
+    defaultValues: { color: TAG_COLORS[0] },
+  });
+  const { reset, setValue, formState: { isSubmitting } } = tagForm;
 
   const handleColorChange = (c: string) => {
     setSelectedColor(c);
-    setValue("color", c);          // ← fix: keep react-hook-form in sync
+    setValue("color", c);
   };
 
   const onSubmit = async (data: TagSchema) => {
     if (!user) return;
     try {
-      // color is already set via setValue, so data.color is correct
       if (editTarget) {
         await editTag(user.uid, editTarget.id, data, editTarget);
         toast("Tag updated!", "success");
@@ -88,11 +92,26 @@ export function TagsPageClient() {
     }
   };
 
-  const getTagStats = (tagId: string) => ({
-    expenses: expenses.filter((e) => e.tagIds.includes(tagId)).length,
-    incomes:  incomes.filter((i) => i.tagIds.includes(tagId)).length,
-    totalAmount: expenses.filter((e) => e.tagIds.includes(tagId)).reduce((a, e) => a + e.amount, 0),
-  });
+  // Per-tag stats: per-currency groups so "All" shows KD 10 / USD 5 / INR 500
+  const getTagStats = (tagId: string) => {
+    const tagExpenses = expenses.filter(
+      (e) => e.tagIds.includes(tagId) && matchesCurrency(e.currencyCode || defaultCode)
+    );
+    const tagIncomes  = incomes.filter(
+      (i) => i.tagIds.includes(tagId) && matchesCurrency(i.currencyCode || defaultCode)
+    );
+    const currencyAmounts = groupByCurrency(
+      tagExpenses,
+      (e) => e.amount,
+      (e) => e.currencyCode,
+      defaultCode
+    );
+    return {
+      expenseCount: tagExpenses.length,
+      incomeCount:  tagIncomes.length,
+      currencyAmounts,
+    };
+  };
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -109,6 +128,9 @@ export function TagsPageClient() {
           <span className="sm:hidden">New</span>
         </button>
       </div>
+
+      {/* ── Global currency filter ────────────────────────────── */}
+      <GlobalCurrencyFilter />
 
       {loading ? <TableSkeleton rows={4} /> : tags.length === 0 ? (
         <EmptyState icon={TagIcon} title="No tags yet"
@@ -142,19 +164,22 @@ export function TagsPageClient() {
                   </div>
                 </div>
                 {tag.description && <p className="text-xs text-muted-foreground mb-3">{tag.description}</p>}
-                <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border">
-                  <div className="text-center">
-                    <div className="font-bold text-foreground">{stats.incomes}</div>
-                    <div className="text-xs text-muted-foreground">Income</div>
+                <div className="pt-3 border-t border-border space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {stats.incomeCount} income · {stats.expenseCount} expense{stats.expenseCount !== 1 ? "s" : ""}
+                    </span>
                   </div>
-                  <div className="text-center">
-                    <div className="font-bold text-foreground">{stats.expenses}</div>
-                    <div className="text-xs text-muted-foreground">Expenses</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="amount-display font-bold text-foreground text-xs">{format(stats.totalAmount)}</div>
-                    <div className="text-xs text-muted-foreground">Amount</div>
-                  </div>
+                  {stats.currencyAmounts.length > 0 && (
+                    <MultiCurrencyAmount
+                      groups={stats.currencyAmounts}
+                      amountClassName="text-sm font-bold text-foreground"
+                      layout="stack"
+                    />
+                  )}
+                  {stats.currencyAmounts.length === 0 && (
+                    <span className="text-xs text-muted-foreground">No expenses</span>
+                  )}
                 </div>
               </div>
             );
@@ -162,70 +187,22 @@ export function TagsPageClient() {
         </div>
       )}
 
-      {/* Form drawer */}
-      <FormDrawer
-        isOpen={showForm}
-        onClose={() => { setShowForm(false); setEditTarget(null); }}
-        title={editTarget ? "Edit Tag" : "New Tag"}
-      >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Name *</label>
-            <input {...register("name")} placeholder="e.g. Groceries" className={inp} autoFocus />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Description</label>
-            <input {...register("description")} placeholder="Optional description…" className={inp} />
-          </div>
-
-          {/* Color picker with react-colorful — also syncs to form field */}
-          <ColorPickerInput label="Color" value={selectedColor} onChange={handleColorChange} />
-
-          {/* Preset swatches for quick pick */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-muted-foreground">Quick colors</label>
-            <div className="flex flex-wrap gap-2">
-              {TAG_COLORS.map((color) => (
-                <button key={color} type="button" onClick={() => handleColorChange(color)}
-                  className="w-7 h-7 rounded-full transition-all hover:scale-110"
-                  style={{
-                    backgroundColor: color,
-                    outline: selectedColor === color ? `3px solid ${color}` : "none",
-                    outlineOffset: "2px",
-                  }} />
-              ))}
-            </div>
-          </div>
-
-          {selectedColor && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Preview:</span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium"
-                style={{ backgroundColor: selectedColor + "22", color: selectedColor, border: `1px solid ${selectedColor}44` }}>
-                <TagIcon className="w-3 h-3" /> Sample Tag
-              </span>
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={() => { setShowForm(false); setEditTarget(null); }}
-              className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={isSubmitting}
-              className="flex-1 flex items-center justify-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-60 transition-all">
-              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editTarget ? "Save Changes" : "Create Tag"}
-            </button>
-          </div>
-        </form>
+      {/* ── Form drawer ──────────────────────────────────────── */}
+      <FormDrawer isOpen={showForm} onClose={() => { setShowForm(false); setEditTarget(null); }}
+        title={editTarget ? "Edit Tag" : "New Tag"}>
+        <TagForm
+          form={tagForm}
+          selectedColor={selectedColor}
+          onColorChange={handleColorChange}
+          onSubmit={onSubmit}
+          onCancel={() => { setShowForm(false); setEditTarget(null); }}
+          submitLabel="Create Tag"
+          isEdit={!!editTarget}
+        />
       </FormDrawer>
 
-      <ConfirmDialog
-        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete} loading={deleting}
-        title="Delete Tag"
+      <ConfirmDialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete} loading={deleting} title="Delete Tag"
         description={`Delete "${deleteTarget?.name}"? It will be removed from all linked records.`}
         confirmLabel="Delete Tag" />
     </div>

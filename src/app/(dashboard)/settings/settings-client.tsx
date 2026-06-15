@@ -17,6 +17,8 @@ import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ColorPickerInput } from "@/components/shared/color-picker-input";
+import { CategoryForm } from "@/components/shared/category-form";
+import { IncomeTypeForm } from "@/components/shared/income-type-form";
 import { ExpenseType, IncomeSourceType, IncomeSourceTypeFormData, Currency, PRESET_CURRENCIES } from "@/types";
 import {
   Loader2, Plus, Edit3, Trash2, Save, DollarSign, Layers, TrendingUp,
@@ -73,15 +75,17 @@ export function SettingsClient() {
     },
   });
 
+  const typeForm = useForm<ExpenseTypeSchema>({
+    resolver: zodResolver(expenseTypeSchema), defaultValues: { isActive: true },
+  });
   const { register: regType, handleSubmit: handleType, reset: resetType, setValue: setTypeVal,
-    formState: { errors: typeErrors, isSubmitting: typeSaving } } = useForm<ExpenseTypeSchema>({
-    resolver: zodResolver(expenseTypeSchema), defaultValues: { isActive: true },
-  });
+    formState: { errors: typeErrors, isSubmitting: typeSaving } } = typeForm;
 
-  const { register: regSrc, handleSubmit: handleSrc, reset: resetSrc, setValue: setSrcVal,
-    formState: { errors: srcErrors, isSubmitting: srcSaving } } = useForm<ExpenseTypeSchema>({
+  const srcForm = useForm<ExpenseTypeSchema>({
     resolver: zodResolver(expenseTypeSchema), defaultValues: { isActive: true },
   });
+  const { register: regSrc, handleSubmit: handleSrc, reset: resetSrc, setValue: setSrcVal,
+    formState: { errors: srcErrors, isSubmitting: srcSaving } } = srcForm;
 
   // ── Handlers ──────────────────────────────────────────────────────
   const onSaveSettings = async (data: SettingsSchema) => {
@@ -374,36 +378,17 @@ export function SettingsClient() {
           {showSrcForm && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-              <form onSubmit={handleSrc(onSaveSrc)} className="p-6 space-y-4 border-b border-border bg-muted/20">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">Name *</label>
-                    <input {...regSrc("name")} placeholder="e.g. Salary" className={inp} />
-                    {srcErrors.name && <p className="text-xs text-destructive">{srcErrors.name.message}</p>}
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">Icon (emoji)</label>
-                    <input {...regSrc("icon")} placeholder="💼" className={inp} />
-                  </div>
-                </div>
-                {/* ── Color picker ── */}
-                <ColorPickerInput
-                  label="Color"
-                  value={srcColor}
-                  onChange={(c) => { setSrcColor(c); setSrcVal("color", c); }}
+              <div className="p-6 border-b border-border bg-muted/20">
+                <IncomeTypeForm
+                  form={srcForm}
+                  color={srcColor}
+                  onColorChange={(c) => { setSrcColor(c); setSrcVal("color", c); }}
+                  onSubmit={onSaveSrc}
+                  onCancel={() => { setShowSrcForm(false); resetSrc(); setEditSrcTarget(null); }}
+                  submitLabel={editSrcTarget ? "Update" : "Add"}
+                  isEdit={!!editSrcTarget}
                 />
-                <div className="flex items-center gap-3 pt-1">
-                  <button type="submit" disabled={srcSaving}
-                    className="flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-all">
-                    {srcSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                    {editSrcTarget ? "Update" : "Add"}
-                  </button>
-                  <button type="button" onClick={() => { setShowSrcForm(false); resetSrc(); setEditSrcTarget(null); }}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    Cancel
-                  </button>
-                </div>
-              </form>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -455,36 +440,17 @@ export function SettingsClient() {
           {showTypeForm && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-              <form onSubmit={handleType(onSaveType)} className="p-6 space-y-4 border-b border-border bg-muted/20">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">Name *</label>
-                    <input {...regType("name")} placeholder="e.g. Food" className={inp} />
-                    {typeErrors.name && <p className="text-xs text-destructive">{typeErrors.name.message}</p>}
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">Icon (emoji)</label>
-                    <input {...regType("icon")} placeholder="🍔" className={inp} />
-                  </div>
-                </div>
-                {/* ── Color picker ── */}
-                <ColorPickerInput
-                  label="Color"
-                  value={typeColor}
-                  onChange={(c) => { setTypeColor(c); setTypeVal("color", c); }}
+              <div className="p-6 border-b border-border bg-muted/20">
+                <CategoryForm
+                  form={typeForm}
+                  color={typeColor}
+                  onColorChange={(c) => { setTypeColor(c); setTypeVal("color", c); }}
+                  onSubmit={onSaveType}
+                  onCancel={() => { setShowTypeForm(false); resetType(); setEditTypeTarget(null); }}
+                  submitLabel={editTypeTarget ? "Update" : "Add"}
+                  isEdit={!!editTypeTarget}
                 />
-                <div className="flex items-center gap-3 pt-1">
-                  <button type="submit" disabled={typeSaving}
-                    className="flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-all">
-                    {typeSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                    {editTypeTarget ? "Update" : "Add"}
-                  </button>
-                  <button type="button" onClick={() => { setShowTypeForm(false); resetType(); setEditTypeTarget(null); }}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    Cancel
-                  </button>
-                </div>
-              </form>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

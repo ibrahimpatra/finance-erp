@@ -8,7 +8,6 @@ import { AddIncomeTypeModal } from "@/components/shared/add-income-type-modal";
 import { useIncomeSourceTypes } from "@/hooks/use-income-source-types";
 import { useCurrencies } from "@/hooks/use-currencies";
 import { useSettingsStore } from "@/stores/settings.store";
-import { PRESET_CURRENCIES } from "@/types";
 import { Loader2, AlertCircle, Plus } from "lucide-react";
 
 interface IncomeFormProps {
@@ -43,13 +42,10 @@ export function IncomeForm({
   const tagIds       = watch("tagIds") ?? [];
   const activeSources = sourceTypes.filter((s) => s.isActive);
 
-  // All currencies: default first, then user-defined, then presets (no duplicates)
+  // Only user-configured currencies: settings default + extra currencies from settings
   const allCurrencies = [
     { code: defaultCode, name: settings?.currencyName ?? "Default", symbol: settings?.currencySymbol ?? "KD" },
     ...currencies.filter((c) => c.code !== defaultCode),
-    ...PRESET_CURRENCIES.filter(
-      (p) => p.code !== defaultCode && !currencies.some((c) => c.code === p.code)
-    ),
   ];
 
   const handleTypeCreated = (type: { id: string; name: string }) => {

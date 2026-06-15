@@ -3,8 +3,8 @@ import { useExpenses } from "@/hooks/use-expenses";
 import { useSpentBy } from "@/hooks/use-spent-by";
 import { useExpenseTypes } from "@/hooks/use-expense-types";
 import { useCurrency } from "@/hooks/use-currency";
-import { useUIStore } from "@/stores/ui.store";
 import { useSettingsStore } from "@/stores/settings.store";
+import { useCurrencyFilter } from "@/components/shared/global-currency-filter";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { formatRelative } from "@/lib/utils/date";
 import Link from "next/link";
@@ -13,20 +13,20 @@ import { getInitials } from "@/lib/utils/helpers";
 
 export function RecentTransactions() {
   const { expenses, loading } = useExpenses();
-  const { spentBys } = useSpentBy();
-  const { expenseTypes } = useExpenseTypes();
-  const { formatFor } = useCurrency();
-  const { dashboardCurrencyFilter } = useUIStore();
-  const { settings } = useSettingsStore();
-  const defaultCurrency = settings?.currencyCode ?? "KWD";
+  const { spentBys }         = useSpentBy();
+  const { expenseTypes }     = useExpenseTypes();
+  const { formatFor }        = useCurrency();
+  const { settings }         = useSettingsStore();
+  const defaultCurrency      = settings?.currencyCode ?? "KWD";
+
+  // Use global currency filter (not the old dashboardCurrencyFilter)
+  const { matches } = useCurrencyFilter();
 
   if (loading) return <TableSkeleton rows={5} />;
 
-  const filtered = dashboardCurrencyFilter
-    ? expenses.filter((e) => (e.currencyCode || defaultCurrency) === dashboardCurrencyFilter)
-    : expenses;
-
-  const recent = filtered.slice(0, 10);
+  const filtered = expenses
+    .filter((e) => matches(e.currencyCode || defaultCurrency))
+    .slice(0, 10);
 
   return (
     <div className="bg-white rounded-lg border border-border overflow-hidden">
@@ -37,16 +37,17 @@ export function RecentTransactions() {
         </Link>
       </div>
 
-      {recent.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="px-4 py-5 text-center text-xs text-muted-foreground">
-          {dashboardCurrencyFilter ? `No expenses in ${dashboardCurrencyFilter}` : "No expenses yet"}
+          No expenses match the current filter
         </div>
       ) : (
         <div className="divide-y divide-border">
-          {recent.map((expense) => {
+          {filtered.map((expense) => {
             const person   = spentBys.find((s) => s.id === expense.spentById);
             const category = expenseTypes.find((t) => t.id === expense.expenseTypeId);
-            const cur      = expense.currencyCode || defaultCurrency;
+            // Always display in the expense's own currency
+            const cur = expense.currencyCode || defaultCurrency;
             return (
               <Link key={expense.id} href={`/expenses/${expense.id}`}
                 className="flex items-center gap-2.5 px-4 py-2 hover:bg-muted/40 transition-colors">
@@ -65,13 +66,17 @@ export function RecentTransactions() {
                         <span className="truncate">{category.name}</span>
                       </>
                     )}
+                    {/* Currency badge always shown for non-default currencies */}
                     {cur !== defaultCurrency && (
                       <span className="px-1 rounded bg-blue-50 text-blue-600 font-semibold shrink-0">{cur}</span>
                     )}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-xs font-bold text-red-500 amount-display">-{formatFor(expense.amount, cur)}</div>
+                  {/* Amount in each expense's own currency */}
+                  <div className="text-xs font-bold text-red-500 amount-display">
+                    -{formatFor(expense.amount, cur)}
+                  </div>
                   <div className="text-[10px] text-muted-foreground">{formatRelative(expense.createdAt)}</div>
                 </div>
               </Link>

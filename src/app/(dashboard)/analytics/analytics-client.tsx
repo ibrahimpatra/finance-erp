@@ -10,9 +10,9 @@ import { useCurrencies } from "@/hooks/use-currencies";
 import { useCurrency } from "@/hooks/use-currency";
 import { useUIStore } from "@/stores/ui.store";
 import { useSettingsStore } from "@/stores/settings.store";
-import { useIncomeStore } from "@/stores/income.store";
-import { useExpenseStore } from "@/stores/expense.store";
-import { useCurrencyStore } from "@/stores/currency.store";
+import { GlobalCurrencyFilter } from "@/components/shared/global-currency-filter";
+import { usePerCurrencyData } from "@/hooks/use-per-currency-data";
+import { MultiCurrencyAmount } from "@/components/shared/multi-currency-amount";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, PieChart, Pie, Cell,
@@ -23,25 +23,26 @@ import { getInitials } from "@/lib/utils/helpers";
 export function AnalyticsClient() {
   useIncome(); useExpenses(); useSpentBy(); useTags(); useExpenseTypes(); useCurrencies();
 
-  const { incomes }    = useIncomeStore();
-  const { expenses }   = useExpenseStore();
-  const { currencies } = useCurrencyStore();
-  const { settings }   = useSettingsStore();
-  const { dashboardCurrencyFilter, setDashboardCurrencyFilter } = useUIStore();
-  const defaultCode = settings?.currencyCode ?? "KWD";
+  const { settings } = useSettingsStore();
+  const defaultCode  = settings?.currencyCode ?? "KWD";
+  const {
+    globalCurrencies, setGlobalCurrencies,
+    dashboardCurrencyFilter, setDashboardCurrencyFilter,
+  } = useUIStore();
 
-  /* Sync default on first load */
+  // Sync dashboardCurrencyFilter (used by useAnalytics) with global filter
   useEffect(() => {
     if (!dashboardCurrencyFilter) setDashboardCurrencyFilter(defaultCode);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultCode]);
+  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const usedCodes = Array.from(new Set([
-    defaultCode,
-    ...incomes.map((i) => i.currencyCode || defaultCode),
-    ...expenses.map((e) => e.currencyCode || defaultCode),
-    ...currencies.map((c) => c.code),
-  ]));
+  useEffect(() => {
+    if (globalCurrencies.length === 0) {
+      setDashboardCurrencyFilter(defaultCode);
+    } else {
+      setDashboardCurrencyFilter(globalCurrencies[0]);
+    }
+  }, [globalCurrencies, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const activeCurrency = dashboardCurrencyFilter || defaultCode;
 
   const {
@@ -50,9 +51,14 @@ export function AnalyticsClient() {
   } = useAnalytics();
 
   const { formatFor } = useCurrency();
+  const { rows: perCurrencyRows, isMulti } = usePerCurrencyData();
   const fmt = (n: number) => formatFor(n, activeCurrency);
 
-  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color?: string }>; label?: string }) => {
+  const CustomTooltip = ({ active, payload, label }: {
+    active?: boolean;
+    payload?: Array<{ name: string; value: number; color?: string }>;
+    label?: string;
+  }) => {
     if (!active || !payload?.length) return null;
     return (
       <div className="bg-white border border-border rounded-xl shadow-card px-3 py-2 text-sm space-y-1">
@@ -70,44 +76,68 @@ export function AnalyticsClient() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* ── Header + currency filter ─────────────────────────── */}
+
+      {/* ── Header + global currency filter ──────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Deep insights into your financial activity</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {globalCurrencies.length > 1
+              ? `Charts show ${activeCurrency} (first selected). Charts support single currency.`
+              : "Deep insights into your financial activity"}
+          </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground">Currency:</span>
-          {usedCodes.map((code) => (
-            <button key={code} onClick={() => setDashboardCurrencyFilter(code)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                activeCurrency === code
-                  ? "bg-primary text-white border-primary shadow-sm shadow-primary/20"
-                  : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}>{code}</button>
-          ))}
-        </div>
+        <GlobalCurrencyFilter />
       </div>
 
-      {/* ── Summary cards ────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: "Total Income",   value: totalIncome,   icon: TrendingUp,   color: "bg-blue-500" },
-          { label: "Total Expenses", value: totalExpenses, icon: TrendingDown, color: "bg-red-500" },
-          { label: "Net Balance",    value: totalBalance,  icon: Wallet,       color: totalBalance >= 0 ? "bg-emerald-500" : "bg-red-500" },
-        ].map((card) => (
-          <div key={card.label} className="bg-white rounded-xl border border-border shadow-card p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`w-9 h-9 ${card.color} rounded-lg flex items-center justify-center`}>
-                <card.icon className="w-4.5 h-4.5 text-white" />
+      {/* ── Summary cards: per-currency when multi selected ───── */}
+      {isMulti ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { label: "Total Income",   key: "totalIncome" as const,   icon: TrendingUp,   color: "bg-blue-500" },
+            { label: "Total Expenses", key: "totalExpenses" as const, icon: TrendingDown, color: "bg-red-500" },
+            { label: "Net Balance",    key: "totalBalance" as const,  icon: Wallet,       color: "bg-emerald-500" },
+          ].map((card) => (
+            <div key={card.label} className="bg-white rounded-xl border border-border shadow-card p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-9 h-9 ${card.color} rounded-lg flex items-center justify-center`}>
+                  <card.icon className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
               </div>
-              <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto scrollbar-thin">
+                {perCurrencyRows.map((row) => (
+                  <div key={row.code} className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold bg-muted text-muted-foreground px-1.5 py-0.5 rounded shrink-0">{row.code}</span>
+                    <span className={`amount-display text-sm font-bold ${card.key === "totalBalance" ? (row[card.key] >= 0 ? "text-emerald-600" : "text-red-600") : card.key === "totalExpenses" ? "text-red-600" : "text-foreground"}`}>
+                      {card.key === "totalExpenses" ? "-" : ""}{formatFor(row[card.key], row.code)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="amount-display text-2xl font-bold text-foreground">{fmt(card.value)}</div>
-            <div className="text-xs text-muted-foreground mt-1 font-medium">{activeCurrency}</div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { label: "Total Income",   value: totalIncome,   icon: TrendingUp,   color: "bg-blue-500" },
+            { label: "Total Expenses", value: totalExpenses, icon: TrendingDown, color: "bg-red-500" },
+            { label: "Net Balance",    value: totalBalance,  icon: Wallet,       color: totalBalance >= 0 ? "bg-emerald-500" : "bg-red-500" },
+          ].map((card) => (
+            <div key={card.label} className="bg-white rounded-xl border border-border shadow-card p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-9 h-9 ${card.color} rounded-lg flex items-center justify-center`}>
+                  <card.icon className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
+              </div>
+              <div className="amount-display text-2xl font-bold text-foreground">{fmt(card.value)}</div>
+              <div className="text-xs text-muted-foreground mt-1 font-medium">{activeCurrency}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Monthly trend ────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-border shadow-card p-5">
@@ -128,7 +158,8 @@ export function AnalyticsClient() {
             <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
             <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt(v)} width={72} />
             <Tooltip content={<CustomTooltip />} />
-            <Legend iconType="circle" iconSize={8} formatter={(v) => <span className="text-xs text-muted-foreground capitalize">{v}</span>} />
+            <Legend iconType="circle" iconSize={8}
+              formatter={(v) => <span className="text-xs text-muted-foreground capitalize">{v}</span>} />
             <Area type="monotone" dataKey="income"   stroke="#3b82f6" strokeWidth={2} fill="url(#incomeGrad)" name="Income" />
             <Area type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} fill="url(#expGrad)" name="Expenses" />
           </AreaChart>
@@ -139,53 +170,60 @@ export function AnalyticsClient() {
         {/* Category breakdown */}
         <div className="bg-white rounded-xl border border-border shadow-card p-5">
           <h3 className="font-semibold text-foreground mb-4">Spending by Category</h3>
-          {categoryBreakdown.length === 0 ? <p className="text-sm text-muted-foreground py-8 text-center">No expense data for {activeCurrency}</p> : (
-            <div className="space-y-3">
-              {categoryBreakdown.map((cat) => (
-                <div key={cat.categoryId} className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium text-foreground">{cat.categoryName}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-muted-foreground">{cat.count} txns</span>
-                      <span className="amount-display font-semibold" style={{ color: cat.color }}>{fmt(cat.amount)}</span>
+          {categoryBreakdown.length === 0
+            ? <p className="text-sm text-muted-foreground py-8 text-center">No expense data for {activeCurrency}</p>
+            : (
+              <div className="space-y-3">
+                {categoryBreakdown.map((cat) => (
+                  <div key={cat.categoryId} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium text-foreground">{cat.categoryName}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-muted-foreground">{cat.count} txns</span>
+                        <span className="amount-display font-semibold" style={{ color: cat.color }}>{fmt(cat.amount)}</span>
+                      </div>
                     </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${cat.percentage}%`, backgroundColor: cat.color }} />
+                    </div>
+                    <div className="text-xs text-right text-muted-foreground">{cat.percentage.toFixed(1)}%</div>
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${cat.percentage}%`, backgroundColor: cat.color }} />
-                  </div>
-                  <div className="text-xs text-right text-muted-foreground">{cat.percentage.toFixed(1)}%</div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
         </div>
 
         {/* Spending by person */}
         <div className="bg-white rounded-xl border border-border shadow-card p-5">
           <h3 className="font-semibold text-foreground mb-4">Spending by Person</h3>
-          {spendingByPerson.length === 0 ? <p className="text-sm text-muted-foreground py-8 text-center">No data for {activeCurrency}</p> : (
-            <div className="space-y-3">
-              {spendingByPerson.slice(0, 8).map((person) => {
-                const max = spendingByPerson[0]?.amount ?? 1;
-                return (
-                  <div key={person.id} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ backgroundColor: person.color }}>
-                      {getInitials(person.name)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="font-medium text-foreground truncate">{person.name}</span>
-                        <span className="amount-display font-semibold text-foreground ml-2 shrink-0">{fmt(person.amount)}</span>
+          {spendingByPerson.length === 0
+            ? <p className="text-sm text-muted-foreground py-8 text-center">No data for {activeCurrency}</p>
+            : (
+              <div className="space-y-3">
+                {spendingByPerson.slice(0, 8).map((person) => {
+                  const max = spendingByPerson[0]?.amount ?? 1;
+                  return (
+                    <div key={person.id} className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                        style={{ backgroundColor: person.color }}>
+                        {getInitials(person.name)}
                       </div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(person.amount / max) * 100}%`, backgroundColor: person.color }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="font-medium text-foreground truncate">{person.name}</span>
+                          <span className="amount-display font-semibold text-foreground ml-2 shrink-0">{fmt(person.amount)}</span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${(person.amount / max) * 100}%`, backgroundColor: person.color }} />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
         </div>
       </div>
 
@@ -196,7 +234,8 @@ export function AnalyticsClient() {
           <div className="flex flex-col md:flex-row items-center gap-6">
             <ResponsiveContainer width="100%" height={200} className="max-w-[220px] shrink-0">
               <PieChart>
-                <Pie data={categoryBreakdown} dataKey="amount" nameKey="categoryName" cx="50%" cy="50%" outerRadius={90} innerRadius={55}>
+                <Pie data={categoryBreakdown} dataKey="amount" nameKey="categoryName"
+                  cx="50%" cy="50%" outerRadius={90} innerRadius={55}>
                   {categoryBreakdown.map((e, i) => <Cell key={i} fill={e.color} strokeWidth={0} />)}
                 </Pie>
                 <Tooltip formatter={(v: number) => fmt(v)} />

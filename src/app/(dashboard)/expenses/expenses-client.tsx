@@ -16,6 +16,8 @@ import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { FormDrawer } from "@/components/shared/form-drawer";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { GlobalCurrencyFilter, useCurrencyFilter } from "@/components/shared/global-currency-filter";
+import { MultiCurrencyAmount, groupByCurrency } from "@/components/shared/multi-currency-amount";
 import { formatDate, formatRelative } from "@/lib/utils/date";
 import { getInitials } from "@/lib/utils/helpers";
 import { exportToCSV } from "@/lib/utils/export";
@@ -32,38 +34,44 @@ export function ExpensesPageClient() {
   const { expenseTypes } = useExpenseTypes();
   const { tags } = useTags();
   useCurrencies();
-  const { formatFor } = useCurrency();
-  const { settings }  = useSettingsStore();
-  const defaultCode   = settings?.currencyCode ?? "KWD";
-  const { toast }     = useToast();
+  const { formatFor }  = useCurrency();
+  const { settings }   = useSettingsStore();
+  const defaultCode    = settings?.currencyCode ?? "KWD";
+  const { toast }      = useToast();
   const { openQuickAdd } = useUIStore();
 
-  const [showForm, setShowForm]          = useState(false);
-  const [showFilters, setShowFilters]    = useState(false);
-  const [searchQ, setSearchQ]            = useState("");
-  const [filterIncome, setFilterIncome]  = useState("");
-  const [filterPerson, setFilterPerson]  = useState("");
-  const [filterType, setFilterType]      = useState("");
-  const [filterCurrency, setFilterCurrency] = useState("");
-  const [deleteTarget, setDeleteTarget]  = useState<Expense | null>(null);
-  const [deleting, setDeleting]          = useState(false);
+  // ── Global currency filter ────────────────────────────────────
+  const { matches: matchesCurrency } = useCurrencyFilter();
 
-  const hasFilters = !!(searchQ || filterIncome || filterPerson || filterType || filterCurrency);
+  const [showForm, setShowForm]        = useState(false);
+  const [showFilters, setShowFilters]  = useState(false);
+  const [searchQ, setSearchQ]          = useState("");
+  const [filterIncome, setFilterIncome]= useState("");
+  const [filterPerson, setFilterPerson]= useState("");
+  const [filterType, setFilterType]    = useState("");
+  const [deleteTarget, setDeleteTarget]= useState<Expense | null>(null);
+  const [deleting, setDeleting]        = useState(false);
+
+  const hasLocalFilters = !!(searchQ || filterIncome || filterPerson || filterType);
 
   const filtered = useMemo(() => {
-    let list = expenses;
-    if (searchQ)        list = list.filter((e) => e.reason.toLowerCase().includes(searchQ.toLowerCase()) || e.notes?.toLowerCase().includes(searchQ.toLowerCase()));
-    if (filterIncome)   list = list.filter((e) => e.incomeSourceId === filterIncome);
-    if (filterPerson)   list = list.filter((e) => e.spentById === filterPerson);
-    if (filterType)     list = list.filter((e) => e.expenseTypeId === filterType);
-    if (filterCurrency) list = list.filter((e) => (e.currencyCode || defaultCode) === filterCurrency);
-    return list;
-  }, [expenses, searchQ, filterIncome, filterPerson, filterType, filterCurrency, defaultCode]);
+    return expenses.filter((e) => {
+      // Global currency filter applied first
+      if (!matchesCurrency(e.currencyCode || defaultCode)) return false;
+      // Local filters
+      if (searchQ && !e.reason.toLowerCase().includes(searchQ.toLowerCase()) &&
+          !e.notes?.toLowerCase().includes(searchQ.toLowerCase())) return false;
+      if (filterIncome && e.incomeSourceId !== filterIncome) return false;
+      if (filterPerson && e.spentById !== filterPerson) return false;
+      if (filterType && e.expenseTypeId !== filterType) return false;
+      return true;
+    });
+  }, [expenses, matchesCurrency, searchQ, filterIncome, filterPerson, filterType, defaultCode]);
 
-  const totalFiltered = useMemo(() => filtered.reduce((a, e) => a + e.amount, 0), [filtered]);
-  const usedCurrencies = useMemo(
-    () => Array.from(new Set(expenses.map((e) => e.currencyCode || defaultCode))),
-    [expenses, defaultCode]
+  // Per-currency totals for the summary bar
+  const currencyTotals = useMemo(
+    () => groupByCurrency(filtered, (e) => e.amount, (e) => e.currencyCode, defaultCode),
+    [filtered, defaultCode]
   );
 
   const handleAdd = async (data: ExpenseSchema) => {
@@ -106,27 +114,27 @@ export function ExpensesPageClient() {
     toast("Exported to CSV!", "success");
   };
 
-  const clearFilters = () => {
-    setSearchQ(""); setFilterIncome(""); setFilterPerson(""); setFilterType(""); setFilterCurrency("");
-  };
-
   return (
     <div className="space-y-5 animate-fade-in">
 
       {/* ── Page header ──────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Expenses</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {expenses.length} total · {formatFor(expenses.reduce((a, e) => a + e.amount, 0))} spent
+            {expenses.length} total
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setShowFilters((v) => !v)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${showFilters || hasFilters ? "border-primary text-primary bg-primary/5" : "border-border hover:bg-muted"}`}>
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+              showFilters || hasLocalFilters
+                ? "border-primary text-primary bg-primary/5"
+                : "border-border hover:bg-muted"
+            }`}>
             <SlidersHorizontal className="w-4 h-4" />
             <span className="hidden sm:inline">Filters</span>
-            {hasFilters && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
+            {hasLocalFilters && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
           </button>
           <button onClick={handleExport}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors">
@@ -142,7 +150,10 @@ export function ExpensesPageClient() {
         </div>
       </div>
 
-      {/* ── Filters panel ────────────────────────────────────── */}
+      {/* ── Global currency filter ────────────────────────────── */}
+      <GlobalCurrencyFilter />
+
+      {/* ── Local filters panel ───────────────────────────────── */}
       {showFilters && (
         <div className="bg-white rounded-xl border border-border p-4 shadow-card">
           <div className="flex flex-wrap gap-2.5">
@@ -150,36 +161,33 @@ export function ExpensesPageClient() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <input value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
                 placeholder="Search expenses…"
-                className="form-input pl-9" />
+                className="w-full pl-9 pr-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all" />
             </div>
-            <select value={filterIncome} onChange={(e) => setFilterIncome(e.target.value)} className="form-input flex-1 min-w-[160px]">
+            <select value={filterIncome} onChange={(e) => setFilterIncome(e.target.value)}
+              className="flex-1 min-w-[160px] px-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all">
               <option value="">All Income Sources</option>
               {incomes.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
             </select>
-            <select value={filterPerson} onChange={(e) => setFilterPerson(e.target.value)} className="form-input flex-1 min-w-[140px]">
+            <select value={filterPerson} onChange={(e) => setFilterPerson(e.target.value)}
+              className="flex-1 min-w-[140px] px-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all">
               <option value="">All People</option>
               {spentBys.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="form-input flex-1 min-w-[140px]">
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+              className="flex-1 min-w-[140px] px-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all">
               <option value="">All Categories</option>
               {expenseTypes.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
             </select>
-            {usedCurrencies.length > 1 && (
-              <select value={filterCurrency} onChange={(e) => setFilterCurrency(e.target.value)} className="form-input flex-1 min-w-[120px]">
-                <option value="">All Currencies</option>
-                {usedCurrencies.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            )}
-            {hasFilters && (
-              <button onClick={clearFilters}
+            {hasLocalFilters && (
+              <button onClick={() => { setSearchQ(""); setFilterIncome(""); setFilterPerson(""); setFilterType(""); }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/8 transition-colors border border-border">
                 <X className="w-4 h-4" /> Clear
               </button>
             )}
           </div>
-          {hasFilters && (
+          {(hasLocalFilters) && (
             <p className="text-xs text-muted-foreground mt-3">
-              Showing {filtered.length} of {expenses.length} · Total: <span className="font-semibold text-foreground amount-display">{formatFor(totalFiltered, filterCurrency || undefined)}</span>
+              Showing {filtered.length} of {expenses.length}
             </p>
           )}
         </div>
@@ -190,8 +198,8 @@ export function ExpensesPageClient() {
         <TableSkeleton rows={6} />
       ) : filtered.length === 0 ? (
         <EmptyState icon={Receipt} title="No expenses found"
-          description={hasFilters ? "Try different filters." : "Add your first expense using the button above."}
-          action={!hasFilters ? (
+          description={hasLocalFilters ? "Try different filters." : "Add your first expense using the button above."}
+          action={!hasLocalFilters ? (
             <button onClick={openQuickAdd}
               className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition-all">
               <Plus className="w-4 h-4" /> Add expense
@@ -200,13 +208,26 @@ export function ExpensesPageClient() {
         />
       ) : (
         <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden">
+          {/* Summary bar — shows per-currency totals */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/20 flex-wrap gap-2">
+            <span className="text-xs text-muted-foreground">
+              {filtered.length} expense{filtered.length !== 1 ? "s" : ""}
+            </span>
+            <MultiCurrencyAmount
+              groups={currencyTotals}
+              amountClassName="text-sm font-bold text-red-500"
+              negative={true}
+              layout="inline"
+            />
+          </div>
           <div className="divide-y divide-border">
             {filtered.map((expense) => {
               const person  = spentBys.find((s) => s.id === expense.spentById);
               const income  = incomes.find((i) => i.id === expense.incomeSourceId);
               const cat     = expenseTypes.find((t) => t.id === expense.expenseTypeId);
               const expTags = tags.filter((t) => expense.tagIds.includes(t.id));
-              const cur     = expense.currencyCode || defaultCode;
+              // Display in original transaction currency
+              const cur = expense.currencyCode || defaultCode;
               return (
                 <div key={expense.id}
                   className="flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-muted/30 transition-colors group">
@@ -228,6 +249,7 @@ export function ExpensesPageClient() {
                           {cat.icon} {cat.name}
                         </span>
                       )}
+                      {/* Always show currency if not default */}
                       {cur !== defaultCode && (
                         <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-semibold">{cur}</span>
                       )}
@@ -246,7 +268,7 @@ export function ExpensesPageClient() {
                       <span className="shrink-0">{formatRelative(expense.createdAt)}</span>
                     </div>
                   </div>
-                  {/* Amount + actions */}
+                  {/* Amount in original currency */}
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="amount-display text-sm font-semibold text-red-500">
                       -{formatFor(expense.amount, cur)}
@@ -269,27 +291,15 @@ export function ExpensesPageClient() {
         </div>
       )}
 
-      {/* ── Form drawer ──────────────────────────────────────── */}
-      <FormDrawer
-        isOpen={showForm}
-        onClose={() => setShowForm(false)}
-        title="New Expense"
-        description="Record a new expense transaction"
-      >
-        <ExpenseForm
-          onSubmit={handleAdd}
-          onCancel={() => setShowForm(false)}
-          submitLabel="Add Expense"
-        />
+      <FormDrawer isOpen={showForm} onClose={() => setShowForm(false)}
+        title="New Expense" description="Record a new expense transaction">
+        <ExpenseForm onSubmit={handleAdd} onCancel={() => setShowForm(false)} submitLabel="Add Expense" />
       </FormDrawer>
 
-      <ConfirmDialog
-        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete} loading={deleting}
-        title="Delete Expense"
+      <ConfirmDialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete} loading={deleting} title="Delete Expense"
         description={`Delete "${deleteTarget?.reason}"? This will reverse the ledger entry and restore the balance.`}
-        confirmLabel="Delete Expense"
-      />
+        confirmLabel="Delete Expense" />
     </div>
   );
 }
