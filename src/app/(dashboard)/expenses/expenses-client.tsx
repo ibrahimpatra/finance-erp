@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { useState, useMemo } from "react";
 import { useExpenses } from "@/hooks/use-expenses";
 import { useIncome } from "@/hooks/use-income";
@@ -37,10 +38,17 @@ export function ExpensesPageClient() {
   const { formatFor }  = useCurrency();
   const { settings }   = useSettingsStore();
   const defaultCode    = settings?.currencyCode ?? "KWD";
+  const { globalCurrency, setGlobalCurrency } = useUIStore();
   const { toast }      = useToast();
   const { openQuickAdd } = useUIStore();
 
   // ── Global currency filter ────────────────────────────────────
+
+  // Default to base currency on first load (not "All")
+  useEffect(() => {
+    if (!globalCurrency) setGlobalCurrency(defaultCode);
+  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { matches: matchesCurrency } = useCurrencyFilter();
 
   const [showForm, setShowForm]        = useState(false);

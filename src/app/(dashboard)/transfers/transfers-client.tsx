@@ -1,19 +1,20 @@
 "use client";
-import { useState, useMemo } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useState, useMemo }     from "react";
+import { useForm }               from "react-hook-form";
+import { zodResolver }           from "@hookform/resolvers/zod";
 import { transferSchema, TransferSchema } from "@/lib/validations/transfer";
-import { useTransfers } from "@/hooks/use-transfers";
-import { useIncome } from "@/hooks/use-income";
-import { useAuthStore } from "@/stores/auth.store";
-import { useTransferStore } from "@/stores/transfer.store";
-import { useSettingsStore } from "@/stores/settings.store";
-import { useCurrency } from "@/hooks/use-currency";
-import { useToast } from "@/components/ui/toaster";
-import { EmptyState } from "@/components/shared/empty-state";
-import { TableSkeleton } from "@/components/shared/loading-skeleton";
-import { FormDrawer } from "@/components/shared/form-drawer";
-import { formatDate } from "@/lib/utils/date";
+import { useTransfers }          from "@/hooks/use-transfers";
+import { useIncome }             from "@/hooks/use-income";
+import { useAuthStore }          from "@/stores/auth.store";
+import { useTransferStore }      from "@/stores/transfer.store";
+import { useSettingsStore }      from "@/stores/settings.store";
+import { useCurrency }           from "@/hooks/use-currency";
+import { GlobalCurrencyFilter, useCurrencyFilter } from "@/components/shared/global-currency-filter";
+import { useToast }              from "@/components/ui/toaster";
+import { EmptyState }            from "@/components/shared/empty-state";
+import { TableSkeleton }         from "@/components/shared/loading-skeleton";
+import { FormDrawer }            from "@/components/shared/form-drawer";
+import { formatDate }            from "@/lib/utils/date";
 import { ArrowLeftRight, Plus, ArrowRight, Loader2, AlertCircle, RefreshCcw } from "lucide-react";
 
 const inp = "form-input";
@@ -25,9 +26,16 @@ export function TransfersPageClient() {
   const { addTransfer } = useTransferStore();
   const { settings }   = useSettingsStore();
   const { formatFor }  = useCurrency();
+  const { matches }    = useCurrencyFilter();
   const { toast }      = useToast();
   const defaultCode    = settings?.currencyCode ?? "KWD";
   const [showForm, setShowForm] = useState(false);
+
+  // Filter transfers list by the global currency selector (fromCurrencyCode is the source currency)
+  const filteredTransfers = useMemo(
+    () => transfers.filter((t) => matches(t.fromCurrencyCode || defaultCode)),
+    [transfers, matches, defaultCode]
+  );
 
   const {
     register, handleSubmit, watch, reset, formState: { errors, isSubmitting },
@@ -76,31 +84,40 @@ export function TransfersPageClient() {
             Move funds between income sources · cross-currency supported
           </p>
         </div>
-        <button onClick={() => setShowForm(true)}
+        <div className="flex items-center gap-3">
+          <GlobalCurrencyFilter />
+          <button onClick={() => setShowForm(true)}
           className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition-all shadow-sm shadow-primary/20">
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">New Transfer</span>
           <span className="sm:hidden">New</span>
         </button>
+        </div>
       </div>
 
       {/* ── List ─────────────────────────────────────────────── */}
       {loading ? (
         <TableSkeleton rows={4} />
-      ) : transfers.length === 0 ? (
+      ) : filteredTransfers.length === 0 ? (
         <EmptyState icon={ArrowLeftRight} title="No transfers yet"
-          description="Transfer money between income sources. Supports different currencies."
+          description={
+            transfers.length > 0
+              ? "No transfers match the selected currency."
+              : "Transfer money between income sources. Supports different currencies."
+          }
           action={
-            <button onClick={() => setShowForm(true)}
-              className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition-all">
-              <Plus className="w-4 h-4" /> New Transfer
-            </button>
+            transfers.length === 0 ? (
+              <button onClick={() => setShowForm(true)}
+                className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition-all">
+                <Plus className="w-4 h-4" /> New Transfer
+              </button>
+            ) : undefined
           }
         />
       ) : (
         <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden">
           <div className="divide-y divide-border">
-            {transfers.map((t) => {
+            {filteredTransfers.map((t) => {
               const from  = incomes.find((i) => i.id === t.fromIncomeId);
               const to    = incomes.find((i) => i.id === t.toIncomeId);
               const fCur  = t.fromCurrencyCode || from?.currencyCode || defaultCode;

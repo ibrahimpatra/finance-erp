@@ -1,14 +1,14 @@
 "use client";
 import { useMemo } from "react";
-import { useIncomeStore } from "@/stores/income.store";
-import { useExpenseStore } from "@/stores/expense.store";
-import { useSpentByStore } from "@/stores/spent-by.store";
-import { useTagStore } from "@/stores/tag.store";
+import { useIncomeStore }     from "@/stores/income.store";
+import { useExpenseStore }    from "@/stores/expense.store";
+import { useSpentByStore }    from "@/stores/spent-by.store";
+import { useTagStore }        from "@/stores/tag.store";
 import { useExpenseTypeStore } from "@/stores/expense-type.store";
-import { useUIStore } from "@/stores/ui.store";
-import { useSettingsStore } from "@/stores/settings.store";
+import { useUIStore }         from "@/stores/ui.store";
+import { useSettingsStore }   from "@/stores/settings.store";
 import { CategoryBreakdown, MonthlyTrend, TagAnalytics } from "@/types";
-import { getLast12Months } from "@/lib/utils/date";
+import { getLast12Months }    from "@/lib/utils/date";
 
 export function useAnalytics() {
   const { incomes }      = useIncomeStore();
@@ -16,12 +16,45 @@ export function useAnalytics() {
   const { spentBys }     = useSpentByStore();
   const { tags }         = useTagStore();
   const { expenseTypes } = useExpenseTypeStore();
-  const { dashboardCurrencyFilter } = useUIStore();
+  const { globalCurrency, dashboardCurrencyFilter } = useUIStore();
   const { settings }     = useSettingsStore();
 
   const defaultCurrency = settings?.currencyCode ?? "KWD";
-  const activeCurrency  = dashboardCurrencyFilter || defaultCurrency;
 
+  // ── "All" mode detection ────────────────────────────────────────
+  // isAllMode = user selected "All" in the global currency filter.
+  // In this mode charts show one currency at a time (switchable via
+  // ChartCurrencySelector). dashboardCurrencyFilter carries that selection;
+  // UIStore.setGlobalCurrency("all") resets it to "" so we cleanly fall
+  // back to the base currency — no stale data ever leaks in.
+  const isAllMode = globalCurrency === "all";
+
+  // activeCurrency: the single currency this hook computes data FOR.
+  // - Single mode: the globally-selected currency (or base)
+  // - All mode:    dashboardCurrencyFilter (chart selector) or base
+  const activeCurrency = isAllMode
+    ? (dashboardCurrencyFilter || defaultCurrency)
+    : (globalCurrency || defaultCurrency);
+
+  // ── Currencies present in data AND configured (for chart selector tabs) ──
+  // FIX (point 13 consistency): was only expenses.currencyCode, so a configured
+  // currency with income but no expenses yet wouldn't appear in the chart selector.
+  // Now merges configured codes + actual data codes — same set as GlobalCurrencyFilter
+  // and usePerCurrencyData use, so all three always show identical currency lists.
+  const availableChartCurrencies = useMemo((): string[] => {
+    const set = new Set<string>();
+    set.add(defaultCurrency);
+    // Configured extra currencies
+    // (currencyStore is not imported here; we derive from actual data instead,
+    //  which covers both configured and unregistered-but-used currencies)
+    expenses.forEach((e) => set.add(e.currencyCode || defaultCurrency));
+    incomes.forEach((i)  => set.add(i.currencyCode || defaultCurrency));
+    return Array.from(set).sort();
+  }, [expenses, incomes, defaultCurrency]);
+
+  // ── Filtered slices ─────────────────────────────────────────────
+  // Uses the same fallback logic as before for single-currency mode so
+  // legacy expenses without currencyCode still group under base currency.
   const filteredIncomes = useMemo(
     () => incomes.filter((i) => (i.currencyCode || defaultCurrency) === activeCurrency),
     [incomes, activeCurrency, defaultCurrency]
@@ -32,19 +65,16 @@ export function useAnalytics() {
     [expenses, activeCurrency, defaultCurrency]
   );
 
-  // totalIncome = sum of initial income amounts (what was received)
+  // ── Totals ──────────────────────────────────────────────────────
   const totalIncome   = useMemo(() => filteredIncomes.reduce((a, i) => a + i.amount, 0),   [filteredIncomes]);
   const totalExpenses = useMemo(() => filteredExpenses.reduce((a, e) => a + e.amount, 0), [filteredExpenses]);
 
-  // ── FIX: totalBalance uses ledger-computed balance (accounts for transfers) ──
-  // income.balance comes from calculateBalanceFromLedger which includes CREDIT
-  // (income added, transfers in) minus DEBIT (expenses, transfers out).
-  // This correctly deducts amounts that have been transferred away.
   const totalBalance = useMemo(
     () => filteredIncomes.reduce((a, i) => a + i.balance, 0),
     [filteredIncomes]
   );
 
+  // ── Category breakdown ──────────────────────────────────────────
   const categoryBreakdown = useMemo((): CategoryBreakdown[] => {
     const map = new Map<string, { amount: number; count: number }>();
     for (const e of filteredExpenses) {
@@ -54,16 +84,17 @@ export function useAnalytics() {
     return Array.from(map.entries()).map(([id, data]) => {
       const et = expenseTypes.find((t) => t.id === id);
       return {
-        categoryId: id,
+        categoryId:   id,
         categoryName: et?.name ?? "Unknown",
-        color: et?.color ?? "#6b7280",
-        amount: data.amount,
-        percentage: totalExpenses > 0 ? (data.amount / totalExpenses) * 100 : 0,
-        count: data.count,
+        color:        et?.color ?? "#6b7280",
+        amount:       data.amount,
+        percentage:   totalExpenses > 0 ? (data.amount / totalExpenses) * 100 : 0,
+        count:        data.count,
       };
     }).sort((a, b) => b.amount - a.amount);
   }, [filteredExpenses, expenseTypes, totalExpenses]);
 
+  // ── Spending by person ──────────────────────────────────────────
   const spendingByPerson = useMemo(() => {
     const map = new Map<string, number>();
     for (const e of filteredExpenses) {
@@ -75,6 +106,7 @@ export function useAnalytics() {
     }).sort((a, b) => b.amount - a.amount);
   }, [filteredExpenses, spentBys]);
 
+  // ── Monthly trend (last 12 months) ──────────────────────────────
   const monthlyTrend = useMemo((): MonthlyTrend[] => {
     return getLast12Months().map(({ start, end, label }) => {
       const monthIncome   = filteredIncomes
@@ -87,20 +119,29 @@ export function useAnalytics() {
     });
   }, [filteredIncomes, filteredExpenses]);
 
+  // ── Tag analytics ───────────────────────────────────────────────
   const tagAnalytics = useMemo((): TagAnalytics[] => {
     return tags.map((tag) => {
       const incomeCount  = filteredIncomes.filter((i) => i.tagIds.includes(tag.id)).length;
       const tagExpenses  = filteredExpenses.filter((e) => e.tagIds.includes(tag.id));
       const expenseCount = tagExpenses.length;
       const totalAmount  = tagExpenses.reduce((a, e) => a + e.amount, 0);
-      return { tagId: tag.id, tagName: tag.name, color: tag.color, incomeCount, expenseCount, totalAmount, usageCount: incomeCount + expenseCount };
+      return {
+        tagId: tag.id, tagName: tag.name, color: tag.color,
+        incomeCount, expenseCount, totalAmount,
+        usageCount: incomeCount + expenseCount,
+      };
     }).sort((a, b) => b.usageCount - a.usageCount);
   }, [tags, filteredIncomes, filteredExpenses]);
 
   return {
     totalIncome, totalExpenses, totalBalance,
     categoryBreakdown, spendingByPerson, monthlyTrend, tagAnalytics,
-    activeCurrency,
+    // ── Currency context (used by chart components for correct formatting) ──
+    activeCurrency,             // the single currency all returned data is in
+    isAllMode,                  // true when global filter is "All"
+    availableChartCurrencies,   // currencies with expense data (for chart selector)
+    // Legacy aliases
     topSpender:   spendingByPerson[0] ?? null,
     topCategory:  categoryBreakdown[0] ?? null,
     incomeCount:  filteredIncomes.length,

@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { useState } from "react";
 import { useIncome } from "@/hooks/use-income";
 import { useAuthStore } from "@/stores/auth.store";
@@ -12,6 +13,7 @@ import { GlobalCurrencyFilter, useCurrencyFilter } from "@/components/shared/glo
 import { useToast } from "@/components/ui/toaster";
 import { TrendingUp, Plus } from "lucide-react";
 import { IncomeSchema } from "@/lib/validations/income";
+import { useUIStore } from "@/stores/ui.store";
 import { useSettingsStore } from "@/stores/settings.store";
 
 export function IncomePageClient() {
@@ -21,6 +23,13 @@ export function IncomePageClient() {
   const defaultCode  = settings?.currencyCode ?? "KWD";
   useCurrencies();
   const { toast }   = useToast();
+  const { globalCurrency, setGlobalCurrency } = useUIStore();
+
+  // Default to base currency on first load (not "All")
+  useEffect(() => {
+    if (!globalCurrency) setGlobalCurrency(defaultCode);
+  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { matches: matchesCurrency } = useCurrencyFilter();
   const [showForm, setShowForm] = useState(false);
 

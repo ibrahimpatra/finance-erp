@@ -12,6 +12,7 @@ interface CreateLedgerEntryParams {
   expenseId?: string;
   transferId?: string;
   spentById?: string;
+  accountId?: string;  // NEW — which bank account this entry belongs to (optional, additive)
   amount: number;
   direction: LedgerDirection;
   description: string;

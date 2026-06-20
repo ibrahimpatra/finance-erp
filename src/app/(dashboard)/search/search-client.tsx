@@ -4,9 +4,10 @@ import { useSearch } from "@/hooks/use-search";
 import { useIncome } from "@/hooks/use-income";
 import { useExpenses } from "@/hooks/use-expenses";
 import { useSpentBy } from "@/hooks/use-spent-by";
-import { useTags } from "@/hooks/use-tags";
-import { useCurrency } from "@/hooks/use-currency";
-import { formatRelative } from "@/lib/utils/date";
+import { useTags }          from "@/hooks/use-tags";
+import { useCurrency }      from "@/hooks/use-currency";
+import { useSettingsStore } from "@/stores/settings.store";
+import { formatRelative }   from "@/lib/utils/date";
 import Link from "next/link";
 import { Search, TrendingUp, Receipt, Users, Tag, ArrowLeftRight } from "lucide-react";
 import { SearchResult } from "@/types";
@@ -23,7 +24,9 @@ export function SearchClient() {
   useIncome(); useExpenses(); useSpentBy(); useTags();
   const [query, setQuery] = useState("");
   const results = useSearch(query);
-  const { format } = useCurrency();
+  const { formatFor } = useCurrency();
+  const { settings }  = useSettingsStore();
+  const defaultCode   = settings?.currencyCode ?? "KWD";
 
   const grouped = results.reduce((acc, r) => {
     if (!acc[r.type]) acc[r.type] = [];
@@ -74,7 +77,11 @@ export function SearchClient() {
                     {r.date && <div className="text-xs text-muted-foreground/70">{formatRelative(r.date)}</div>}
                   </div>
                   {r.amount !== undefined && (
-                    <div className="amount-display text-sm font-semibold text-foreground shrink-0">{format(r.amount)}</div>
+                    <div className="amount-display text-sm font-semibold text-foreground shrink-0">
+                      {/* FIX: was format(r.amount) — always used base currency symbol.
+                          Now uses formatFor with the result's own currencyCode. */}
+                      {formatFor(r.amount, r.currencyCode || defaultCode)}
+                    </div>
                   )}
                 </Link>
               ))}

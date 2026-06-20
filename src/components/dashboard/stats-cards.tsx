@@ -1,15 +1,19 @@
 "use client";
 import { usePerCurrencyData } from "@/hooks/use-per-currency-data";
-import { useCurrency } from "@/hooks/use-currency";
-import { useIncomeStore } from "@/stores/income.store";
-import { StatsGridSkeleton } from "@/components/shared/loading-skeleton";
-import { TrendingUp, Receipt, Wallet, BarChart2, Trophy, Users } from "lucide-react";
-import { useAnalytics } from "@/hooks/use-analytics";
+import { useCurrency }        from "@/hooks/use-currency";
+import { useIncomeStore }     from "@/stores/income.store";
+import { useBankAccounts }    from "@/hooks/use-bank-accounts";
+import { StatsGridSkeleton }  from "@/components/shared/loading-skeleton";
+import { TrendingUp, Receipt, Wallet, BarChart2, Trophy, Users, Landmark } from "lucide-react";
+import { useAnalytics }       from "@/hooks/use-analytics";
+import Link from "next/link";
+import { cn } from "@/lib/utils/helpers";
 
 export function StatsCards() {
-  const { loading } = useIncomeStore();
-  const { rows, isMulti } = usePerCurrencyData();
-  const { formatFor }     = useCurrency();
+  const { loading }        = useIncomeStore();
+  const { rows, isMulti }  = usePerCurrencyData();
+  const { formatFor }      = useCurrency();
+  const { accountsWithBalance } = useBankAccounts();
   // Still use useAnalytics for topSpender/topCategory (single-currency derived)
   const { topSpender, topCategory, activeCurrency } = useAnalytics();
 
@@ -107,6 +111,7 @@ export function StatsCards() {
 
   // ── Multi-currency: per-currency stacked rows inside cards ─────
   return (
+    <>
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
       {/* Balance card — stacked rows */}
@@ -213,6 +218,68 @@ export function StatsCards() {
         <p className="text-[11px] text-muted-foreground mt-2 amount-display">
           {topCategory ? formatFor(topCategory.amount, activeCurrency) : "No data"}
         </p>
+      </div>
+    </div>
+
+    {/* ── Accounts at a glance strip ─────────────────────────── */}
+    {accountsWithBalance.length > 0 && (
+      <AccountsStrip accounts={accountsWithBalance} formatFor={formatFor} />
+    )}
+    </>
+  );
+}
+
+// ── Accounts strip sub-component ─────────────────────────────────
+interface AccountsStripProps {
+  accounts: import("@/types").BankAccountWithBalance[];
+  formatFor: (amount: number, code?: string) => string;
+}
+
+function AccountsStrip({ accounts, formatFor }: AccountsStripProps) {
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Landmark className="w-4 h-4 text-muted-foreground" />
+          <p className="text-sm font-semibold text-foreground">Accounts</p>
+        </div>
+        <Link href="/accounts" className="text-xs text-primary hover:underline">
+          View all
+        </Link>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin">
+        {accounts.map((account) => (
+          <Link
+            key={account.id}
+            href={`/accounts/${account.id}`}
+            className="flex-shrink-0 bg-white rounded-xl border border-border p-4 w-44 hover:shadow-card transition-all group"
+          >
+            <div className="flex items-center gap-2 mb-2.5">
+              <span className="text-lg">{account.icon ?? "🏦"}</span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold truncate group-hover:text-primary transition-colors">
+                  {account.name}
+                </p>
+                <p className="text-[10px] text-muted-foreground">{account.currencyCode}</p>
+              </div>
+            </div>
+            <p className={cn(
+              "amount-display text-base font-bold leading-tight",
+              account.balance < 0 ? "text-red-600" : "text-foreground"
+            )}>
+              {formatFor(account.balance, account.currencyCode)}
+            </p>
+            <div className="h-1 bg-muted rounded-full mt-2 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${account.attributionRate}%`, backgroundColor: account.color }}
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {Math.round(account.attributionRate)}% attributed
+            </p>
+          </Link>
+        ))}
       </div>
     </div>
   );

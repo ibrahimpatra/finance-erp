@@ -13,8 +13,8 @@ export function IncomeOverview() {
   const { formatFor }         = useCurrency();
   const { settings }          = useSettingsStore();
   const defaultCurrency       = settings?.currencyCode ?? "KWD";
-  const { globalCurrencies }  = useUIStore();
-  const { matches }           = useCurrencyFilter();
+  const { globalCurrency }    = useUIStore();
+  const { matches, isAll }    = useCurrencyFilter();
 
   if (loading) return <TableSkeleton rows={4} />;
 
@@ -22,7 +22,7 @@ export function IncomeOverview() {
   const filtered = incomes.filter((i) => matches(i.currencyCode || defaultCurrency));
 
   // When showing multiple currencies, group by currency for clarity
-  const isMulti = globalCurrencies.length !== 1;
+  const isMulti = isAll;
 
   return (
     <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden">
@@ -45,7 +45,7 @@ export function IncomeOverview() {
       {filtered.length === 0 ? (
         <div className="px-5 py-8 text-center">
           <p className="text-sm text-muted-foreground">
-            No income sources for selected {globalCurrencies.length > 0 ? "currencies" : "filter"}
+            No income sources for selected {globalCurrency === "all" ? "currencies" : "filter"}
           </p>
           <Link href="/income" className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium">
             Add income source <ArrowUpRight className="w-3 h-3" />
@@ -67,7 +67,7 @@ export function IncomeOverview() {
                     <span className="text-sm font-medium text-foreground truncate">{income.name}</span>
                     <span className="text-[11px] text-muted-foreground shrink-0">{income.source}</span>
                     {/* Always show currency badge when showing multiple currencies */}
-                    {(isMulti || cur !== defaultCurrency) && (
+                    {(isAll || cur !== defaultCurrency) && (
                       <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-semibold shrink-0">{cur}</span>
                     )}
                   </div>

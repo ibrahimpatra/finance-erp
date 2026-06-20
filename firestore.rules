@@ -70,6 +70,20 @@ service cloud.firestore {
         allow create: if isOwner(userId) && hasValidUserId(userId);
         allow update, delete: if isOwner(userId);
       }
+      // ── Bank Accounts ────────────────────────────────────────
+      match /bankAccounts/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow update, delete: if isOwner(userId);
+      }
+      // ── Expense Income Allocations (FIFO attribution — display only) ──
+      // Allow delete so FIFO can clear and re-run; update blocked (immutable once set).
+      match /expenseIncomeAllocations/{docId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserId(userId);
+        allow delete: if isOwner(userId);
+        allow update: if false;
+      }
     }
 
     match /{document=**} {

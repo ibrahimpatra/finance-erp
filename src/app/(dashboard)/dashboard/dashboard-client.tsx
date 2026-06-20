@@ -1,22 +1,21 @@
 "use client";
 import { useEffect } from "react";
-import { useIncome } from "@/hooks/use-income";
-import { useExpenses } from "@/hooks/use-expenses";
-import { useSpentBy } from "@/hooks/use-spent-by";
-import { useTags } from "@/hooks/use-tags";
-import { useTransfers } from "@/hooks/use-transfers";
+import { useIncome }     from "@/hooks/use-income";
+import { useExpenses }   from "@/hooks/use-expenses";
+import { useSpentBy }    from "@/hooks/use-spent-by";
+import { useTags }       from "@/hooks/use-tags";
+import { useTransfers }  from "@/hooks/use-transfers";
 import { useExpenseTypes } from "@/hooks/use-expense-types";
 import { useCurrencies } from "@/hooks/use-currencies";
-import { useUIStore } from "@/stores/ui.store";
+import { useBankAccounts } from "@/hooks/use-bank-accounts";
+import { useUIStore }    from "@/stores/ui.store";
 import { useSettingsStore } from "@/stores/settings.store";
-import { useCurrencyStore } from "@/stores/currency.store";
-import { useIncomeStore } from "@/stores/income.store";
-import { useExpenseStore } from "@/stores/expense.store";
-import { StatsCards } from "@/components/dashboard/stats-cards";
+import { StatsCards }    from "@/components/dashboard/stats-cards";
 import { IncomeOverview } from "@/components/dashboard/income-overview";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { ExpensePieChart, MonthlyTrendChart, SpendingByPersonChart } from "@/components/dashboard/expense-chart";
 import { GlobalCurrencyFilter } from "@/components/shared/global-currency-filter";
+import { MigrationBanner } from "@/components/shared/migration-banner";
 
 export function DashboardClient() {
   useIncome();
@@ -26,37 +25,33 @@ export function DashboardClient() {
   useTransfers();
   useExpenseTypes();
   useCurrencies();
+  const { accounts } = useBankAccounts();
 
-  const { incomes }    = useIncomeStore();
-  const { expenses }   = useExpenseStore();
-  const { currencies } = useCurrencyStore();
   const { settings }   = useSettingsStore();
-  const {
-    globalCurrencies, setGlobalCurrencies,
-    dashboardCurrencyFilter, setDashboardCurrencyFilter,
-  } = useUIStore();
+  const { globalCurrency, setGlobalCurrency, setDashboardCurrencyFilter } = useUIStore();
+  const defaultCode    = settings?.currencyCode ?? "KWD";
 
-  const defaultCode = settings?.currencyCode ?? "KWD";
-
-  // On first load, default to the settings currency if nothing selected
+  // On first load: default to base currency (not "All")
   useEffect(() => {
-    if (!dashboardCurrencyFilter) {
-      setDashboardCurrencyFilter(defaultCode);
+    if (!globalCurrency) {
+      setGlobalCurrency(defaultCode);
     }
   }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When global filter is "All" or has multiple selections, keep dashboardCurrencyFilter
-  // pointing to the first selection (or default) for useAnalytics compat
+  // Keep dashboardCurrencyFilter in sync for single-currency mode.
+  // "all" mode: UIStore.setGlobalCurrency already resets dashboardCurrencyFilter
+  // to "" on switch, so useAnalytics cleanly defaults to base currency with no
+  // stale values causing cross-currency amounts to be added together.
   useEffect(() => {
-    if (globalCurrencies.length === 0) {
-      // "All" selected — keep dashboardCurrencyFilter at default
-      setDashboardCurrencyFilter(defaultCode);
-    } else {
-      setDashboardCurrencyFilter(globalCurrencies[0]);
+    if (globalCurrency && globalCurrency !== "all") {
+      setDashboardCurrencyFilter(globalCurrency);
     }
-  }, [globalCurrencies, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+    // "all" → UIStore handled the reset; ChartCurrencySelector drives per-chart selection
+  }, [globalCurrency, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeCurrency = dashboardCurrencyFilter || defaultCode;
+  const displayLabel = globalCurrency === "all"
+    ? "All currencies"
+    : (globalCurrency || defaultCode);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -66,27 +61,22 @@ export function DashboardClient() {
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Overview</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {globalCurrencies.length === 1
-              ? `Viewing ${activeCurrency}`
-              : globalCurrencies.length > 1
-              ? `Viewing ${globalCurrencies.join(", ")}`
-              : "Viewing all currencies"}
+            Viewing <span className="font-semibold text-foreground">{displayLabel}</span>
           </p>
         </div>
-        {/* Global currency filter chips */}
         <GlobalCurrencyFilter />
       </div>
 
-      {/* ── Stats ────────────────────────────────────────────── */}
+      {/* Migration banner — shows once for users with incomes but no accounts yet */}
+      <MigrationBanner show={accounts.length === 0} />
+
       <StatsCards />
 
-      {/* ── Income + Recent ──────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <IncomeOverview />
         <RecentTransactions />
       </div>
 
-      {/* ── Charts ───────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <MonthlyTrendChart />
         <ExpensePieChart />

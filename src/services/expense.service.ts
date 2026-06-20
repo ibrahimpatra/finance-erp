@@ -7,6 +7,7 @@ import { COLLECTIONS } from "@/lib/firebase/db";
 import { Expense, ExpenseFormData, ExpenseFilters } from "@/types";
 import { createLedgerEntry } from "./ledger.service";
 import { logAudit } from "./audit.service";
+import { clearAutoAllocationsForExpense } from "./attribution.service";
 
 export async function getExpenses(userId: string, filters?: ExpenseFilters): Promise<Expense[]> {
   let q = query(collection(db, COLLECTIONS.EXPENSES(userId)), orderBy("createdAt", "desc"));
@@ -59,13 +60,14 @@ export async function createExpense(userId: string, data: ExpenseFormData): Prom
   await createLedgerEntry({
     userId,
     transactionType: "EXPENSE_CREATED",
-    incomeSourceId: data.incomeSourceId,
-    expenseId: ref.id,
-    spentById: data.spentById,
-    amount: data.amount,
-    direction: "DEBIT",
-    description: `Expense: ${data.reason}`,
-    metadata: { expenseTypeId: data.expenseTypeId },
+    incomeSourceId:  data.incomeSourceId,
+    expenseId:       ref.id,
+    spentById:       data.spentById,
+    accountId:       data.accountId,  // NEW — pass through if present
+    amount:          data.amount,
+    direction:       "DEBIT",
+    description:     `Expense: ${data.reason}`,
+    metadata:        { expenseTypeId: data.expenseTypeId },
   });
   await logAudit(userId, "CREATE", "expense", ref.id, undefined, data);
   return ref.id;
@@ -78,12 +80,22 @@ export async function updateExpense(userId: string, id: string, data: Partial<Ex
     await createLedgerEntry({
       userId,
       transactionType: "EXPENSE_UPDATED",
-      incomeSourceId: oldData.incomeSourceId,
-      expenseId: id,
-      amount: Math.abs(diff),
-      direction: diff > 0 ? "DEBIT" : "CREDIT",
-      description: `Expense updated: ${data.reason || oldData.reason}`,
+      incomeSourceId:  oldData.incomeSourceId,
+      expenseId:       id,
+      accountId:       oldData.accountId, // carry forward the accountId
+      amount:          Math.abs(diff),
+      direction:       diff > 0 ? "DEBIT" : "CREDIT",
+      description:     `Expense updated: ${data.reason || oldData.reason}`,
     });
+    // Re-run FIFO attribution after amount change
+    if (oldData.accountId) {
+      try {
+        await clearAutoAllocationsForExpense(userId, id);
+        // Attribution will be re-triggered by the store after refetch
+      } catch {
+        // Attribution errors must never block the main operation
+      }
+    }
   }
   await logAudit(userId, "UPDATE", "expense", id, oldData, data);
 }
@@ -93,12 +105,19 @@ export async function deleteExpense(userId: string, id: string, expense: Expense
   await createLedgerEntry({
     userId,
     transactionType: "EXPENSE_DELETED",
-    incomeSourceId: expense.incomeSourceId,
-    expenseId: id,
-    amount: expense.amount,
-    direction: "CREDIT",
-    description: `Expense deleted: ${expense.reason}`,
+    incomeSourceId:  expense.incomeSourceId,
+    expenseId:       id,
+    accountId:       expense.accountId, // carry forward
+    amount:          expense.amount,
+    direction:       "CREDIT",
+    description:     `Expense deleted: ${expense.reason}`,
   });
+  // Clean up attribution records — never block on this
+  try {
+    await clearAutoAllocationsForExpense(userId, id);
+  } catch {
+    // Swallow — allocation cleanup is non-critical
+  }
   await logAudit(userId, "DELETE", "expense", id, expense);
 }
 
@@ -106,12 +125,13 @@ export async function createRefund(userId: string, expense: Expense, amount: num
   await createLedgerEntry({
     userId,
     transactionType: "REFUND",
-    incomeSourceId: expense.incomeSourceId,
-    expenseId: expense.id,
+    incomeSourceId:  expense.incomeSourceId,
+    expenseId:       expense.id,
+    accountId:       expense.accountId,
     amount,
-    direction: "CREDIT",
-    description: `Refund: ${reason}`,
-    metadata: { originalExpenseId: expense.id, reason },
+    direction:       "CREDIT",
+    description:     `Refund: ${reason}`,
+    metadata:        { originalExpenseId: expense.id, reason },
   });
   await logAudit(userId, "REFUND", "expense", expense.id, undefined, { amount, reason });
 }
@@ -128,22 +148,24 @@ export async function reassignExpense(
   await createLedgerEntry({
     userId,
     transactionType: "EXPENSE_REASSIGNED",
-    incomeSourceId: expense.incomeSourceId,
-    expenseId: expense.id,
-    amount: expense.amount,
-    direction: "CREDIT",
-    description: `Expense reassigned from source`,
-    metadata: { fromIncomeId: expense.incomeSourceId, toIncomeId: newIncomeSourceId },
+    incomeSourceId:  expense.incomeSourceId,
+    expenseId:       expense.id,
+    accountId:       expense.accountId,
+    amount:          expense.amount,
+    direction:       "CREDIT",
+    description:     `Expense reassigned from source`,
+    metadata:        { fromIncomeId: expense.incomeSourceId, toIncomeId: newIncomeSourceId },
   });
   await createLedgerEntry({
     userId,
     transactionType: "EXPENSE_REASSIGNED",
-    incomeSourceId: newIncomeSourceId,
-    expenseId: expense.id,
-    amount: expense.amount,
-    direction: "DEBIT",
-    description: `Expense reassigned to source`,
-    metadata: { fromIncomeId: expense.incomeSourceId, toIncomeId: newIncomeSourceId },
+    incomeSourceId:  newIncomeSourceId,
+    expenseId:       expense.id,
+    accountId:       expense.accountId,
+    amount:          expense.amount,
+    direction:       "DEBIT",
+    description:     `Expense reassigned to source`,
+    metadata:        { fromIncomeId: expense.incomeSourceId, toIncomeId: newIncomeSourceId },
   });
   await logAudit(userId, "REASSIGN", "expense", expense.id, expense, { newIncomeSourceId });
 }

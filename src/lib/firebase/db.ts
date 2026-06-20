@@ -14,4 +14,7 @@ export const COLLECTIONS = {
   EXPENSE_TYPES:        (uid: string) => `users/${uid}/expenseTypes`,
   INCOME_SOURCE_TYPES:  (uid: string) => `users/${uid}/incomeSourceTypes`,
   CURRENCIES:           (uid: string) => `users/${uid}/currencies`,
+  // ── NEW ──────────────────────────────────────────────────────────
+  BANK_ACCOUNTS:        (uid: string) => `users/${uid}/bankAccounts`,
+  ALLOCATIONS:          (uid: string) => `users/${uid}/expenseIncomeAllocations`,
 } as const;

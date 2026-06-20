@@ -1,32 +1,50 @@
 "use client";
-import { useUIStore } from "@/stores/ui.store";
-import { useSettingsStore } from "@/stores/settings.store";
-import { useCurrencyStore } from "@/stores/currency.store";
-import { cn } from "@/lib/utils/helpers";
+import { useMemo }           from "react";
+import { useUIStore }        from "@/stores/ui.store";
+import { useSettingsStore }  from "@/stores/settings.store";
+import { useCurrencyStore }  from "@/stores/currency.store";
+import { useIncomeStore }    from "@/stores/income.store";
+import { useExpenseStore }   from "@/stores/expense.store";
+import { cn }                from "@/lib/utils/helpers";
 
 interface GlobalCurrencyFilterProps {
-  /** Show a label before the chips. Default: "Currency:" */
-  label?: string;
-  /** Extra className on the wrapper */
+  label?:     string;
   className?: string;
 }
 
 export function GlobalCurrencyFilter({ label = "Currency:", className }: GlobalCurrencyFilterProps) {
   const { settings }   = useSettingsStore();
   const { currencies } = useCurrencyStore();
-  const { globalCurrencies, toggleGlobalCurrency, clearGlobalCurrencies } = useUIStore();
+  const { incomes }    = useIncomeStore();
+  const { expenses }   = useExpenseStore();
+  const { globalCurrency, setGlobalCurrency } = useUIStore();
 
   const defaultCode = settings?.currencyCode ?? "KWD";
 
-  // Only user-configured currencies: default + extras from currencies store
-  const configuredCodes = Array.from(
-    new Set([defaultCode, ...currencies.map((c) => c.code)])
-  );
+  /**
+   * FIX (point 12): Previously only used configuredCodes (settings + currencies store).
+   * Users who had expenses/incomes in currencies they never explicitly configured
+   * would see the filter hidden (length <= 1) and their transactions invisible in "All" mode.
+   *
+   * Now: allCodes = union of configured codes + codes actually present in data.
+   * This ensures the filter appears and shows all relevant currencies regardless of
+   * whether the user has gone to Settings → Currencies to add them explicitly.
+   */
+  const allCodes = useMemo(() => {
+    const set = new Set<string>();
+    set.add(defaultCode);
+    currencies.forEach((c) => set.add(c.code));
+    // Scan actual transaction data for additional currencies
+    incomes.forEach((i) => { if (i.currencyCode) set.add(i.currencyCode); });
+    expenses.forEach((e) => { if (e.currencyCode) set.add(e.currencyCode); });
+    return Array.from(set).sort();
+  }, [defaultCode, currencies, incomes, expenses]);
 
-  // Single currency → no filter needed
-  if (configuredCodes.length <= 1) return null;
+  // Only render when there are multiple currencies (configured or in data)
+  if (allCodes.length <= 1) return null;
 
-  const isAll = globalCurrencies.length === 0;
+  const isAll      = globalCurrency === "all";
+  const activeCode = isAll ? null : (globalCurrency || defaultCode);
 
   return (
     <div className={cn("flex items-center gap-2 flex-wrap", className)}>
@@ -34,9 +52,9 @@ export function GlobalCurrencyFilter({ label = "Currency:", className }: GlobalC
         <span className="text-xs text-muted-foreground shrink-0">{label}</span>
       )}
 
-      {/* "All" chip */}
+      {/* All chip */}
       <button
-        onClick={clearGlobalCurrencies}
+        onClick={() => setGlobalCurrency("all")}
         className={cn(
           "px-3 py-1.5 rounded-full text-xs font-semibold border transition-all",
           isAll
@@ -47,39 +65,56 @@ export function GlobalCurrencyFilter({ label = "Currency:", className }: GlobalC
         All
       </button>
 
-      {/* One chip per configured currency */}
-      {configuredCodes.map((code) => {
-        const active = globalCurrencies.includes(code);
-        return (
-          <button
-            key={code}
-            onClick={() => toggleGlobalCurrency(code)}
-            className={cn(
-              "px-3 py-1.5 rounded-full text-xs font-semibold border transition-all",
-              active
-                ? "bg-primary text-white border-primary shadow-sm shadow-primary/20"
-                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            {code}
-          </button>
-        );
-      })}
+      {/* One chip per code — configured OR present in data */}
+      {allCodes.map((code) => (
+        <button
+          key={code}
+          onClick={() => setGlobalCurrency(code)}
+          className={cn(
+            "px-3 py-1.5 rounded-full text-xs font-semibold border transition-all",
+            activeCode === code
+              ? "bg-primary text-white border-primary shadow-sm shadow-primary/20"
+              : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          {code}
+        </button>
+      ))}
     </div>
   );
 }
 
-/** Helper — returns true if `currencyCode` passes the current global filter */
+/**
+ * Hook — returns whether a given currency code passes the current global filter.
+ * "" or missing → treated as base currency.
+ * "all"         → everything passes.
+ * specific code → only matching transactions pass.
+ */
 export function useCurrencyFilter() {
-  const { globalCurrencies } = useUIStore();
-  const { settings }         = useSettingsStore();
-  const defaultCode = settings?.currencyCode ?? "KWD";
+  const { globalCurrency } = useUIStore();
+  const { settings }       = useSettingsStore();
+  const defaultCode        = settings?.currencyCode ?? "KWD";
+
+  const resolvedCode = (globalCurrency && globalCurrency !== "all")
+    ? globalCurrency
+    : defaultCode;
+
+  const isAll = globalCurrency === "all";
 
   const matches = (code?: string | null) => {
-    const resolved = code || defaultCode;
-    if (globalCurrencies.length === 0) return true; // All
-    return globalCurrencies.includes(resolved);
+    if (isAll) return true;
+    return (code || defaultCode) === resolvedCode;
   };
 
-  return { matches, active: globalCurrencies, isAll: globalCurrencies.length === 0 };
+  return {
+    matches,
+    isAll,
+    activeCode: isAll ? null : resolvedCode,
+  };
 }
+
+interface GlobalCurrencyFilterProps {
+  label?: string;
+  className?: string;
+}
+

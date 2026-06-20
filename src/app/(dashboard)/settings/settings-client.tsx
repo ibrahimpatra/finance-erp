@@ -18,6 +18,7 @@ import { useToast } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ColorPickerInput } from "@/components/shared/color-picker-input";
 import { CategoryForm } from "@/components/shared/category-form";
+import { cn } from "@/lib/utils/helpers";
 import { IncomeTypeForm } from "@/components/shared/income-type-form";
 import { ExpenseType, IncomeSourceType, IncomeSourceTypeFormData, Currency, PRESET_CURRENCIES } from "@/types";
 import {
@@ -242,6 +243,42 @@ export function SettingsClient() {
               </button>
             </div>
           </form>
+
+          {/* ── Attribution Mode ───────────────────────────────────────── */}
+          <div className="flex items-center justify-between p-4 mt-2 bg-muted/40 rounded-xl border border-border">
+            <div>
+              <p className="text-sm font-medium">Income Attribution Mode</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                How expenses are matched to income entries in bank accounts
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {(["auto", "prompt"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={async () => {
+                    if (!user) return;
+                    await updateSettings(user.uid, {
+                      currencyName:   settings?.currencyName ?? "Kuwaiti Dinar",
+                      currencyCode:   settings?.currencyCode ?? "KWD",
+                      currencySymbol: settings?.currencySymbol ?? "KD",
+                      attributionMode: mode,
+                    });
+                    toast(`Attribution set to ${mode === "auto" ? "Auto FIFO" : "Prompt me"}`, "success");
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                    (settings?.attributionMode ?? "auto") === mode
+                      ? "bg-primary text-white border-primary"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  {mode === "auto" ? "Auto (FIFO)" : "Prompt Me"}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 

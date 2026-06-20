@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,6 +9,7 @@ import { useExpenses } from "@/hooks/use-expenses";
 import { useCurrencies } from "@/hooks/use-currencies";
 import { useAuthStore } from "@/stores/auth.store";
 import { useSpentByStore } from "@/stores/spent-by.store";
+import { useUIStore } from "@/stores/ui.store";
 import { useSettingsStore } from "@/stores/settings.store";
 import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/components/ui/toaster";
@@ -34,6 +36,13 @@ export function SpentByPageClient() {
   const { addSpentBy, editSpentBy, removeSpentBy } = useSpentByStore();
   const { formatFor } = useCurrency();
   const { toast }    = useToast();
+  const { globalCurrency, setGlobalCurrency } = useUIStore();
+
+  // Default to base currency on first load (not "All")
+  useEffect(() => {
+    if (!globalCurrency) setGlobalCurrency(defaultCode);
+  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { matches: matchesCurrency } = useCurrencyFilter();
 
   const [showForm,     setShowForm]     = useState(false);

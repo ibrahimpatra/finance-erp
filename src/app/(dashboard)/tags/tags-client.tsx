@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,6 +10,7 @@ import { useIncome } from "@/hooks/use-income";
 import { useCurrencies } from "@/hooks/use-currencies";
 import { useAuthStore } from "@/stores/auth.store";
 import { useTagStore } from "@/stores/tag.store";
+import { useUIStore } from "@/stores/ui.store";
 import { useSettingsStore } from "@/stores/settings.store";
 import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/components/ui/toaster";
@@ -31,7 +33,14 @@ export function TagsPageClient() {
   const defaultCode  = settings?.currencyCode ?? "KWD";
   useCurrencies();
   const { addTag, editTag, removeTag } = useTagStore();
+  const { globalCurrency, setGlobalCurrency } = useUIStore();
   const { toast }      = useToast();
+
+  // Default to base currency on first load (not "All")
+  useEffect(() => {
+    if (!globalCurrency) setGlobalCurrency(defaultCode);
+  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { matches: matchesCurrency } = useCurrencyFilter();
 
   const [showForm,     setShowForm]     = useState(false);

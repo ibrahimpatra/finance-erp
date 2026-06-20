@@ -11,11 +11,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, TrendingUp, Receipt, ArrowLeftRight,
   Users, Tag, BarChart3, Clock, Search, Settings,
-  LogOut, Menu, X, ChevronDown, User, Layers,
+  LogOut, Menu, X, ChevronDown, User, Layers, Landmark,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { label: "Dashboard",  href: "/dashboard",  icon: LayoutDashboard, color: "bg-blue-500" },
+  { label: "Accounts",   href: "/accounts",   icon: Landmark,        color: "bg-teal-500" },
   { label: "Income",     href: "/income",      icon: TrendingUp,      color: "bg-emerald-500" },
   { label: "Expenses",   href: "/expenses",    icon: Receipt,         color: "bg-red-500" },
   { label: "Transfers",  href: "/transfers",   icon: ArrowLeftRight,  color: "bg-amber-500" },
@@ -27,7 +28,7 @@ const NAV_ITEMS = [
   { label: "Settings",   href: "/settings",    icon: Settings,        color: "bg-gray-500" },
 ];
 
-const PRIMARY = NAV_ITEMS.slice(0, 4);
+const PRIMARY = NAV_ITEMS.slice(0, 5);
 
 /** Use a timeout-based open/close to bridge the gap between trigger and panel */
 function useDropdown(delay = 80) {
@@ -87,7 +88,7 @@ export function Navbar() {
             <button
               className={cn(
                 "nav-item select-none cursor-pointer",
-                NAV_ITEMS.slice(4).some((n) => isActive(n.href)) && "active"
+                NAV_ITEMS.slice(5).some((n) => isActive(n.href)) && "active"
               )}
             >
               More
@@ -112,7 +113,7 @@ export function Navbar() {
                   className="absolute left-0 top-[calc(100%+4px)] w-72 bg-white rounded-xl border border-border shadow-xl shadow-black/10 z-[55]"
                 >
                   <div className="p-3 grid grid-cols-3 gap-1">
-                    {NAV_ITEMS.slice(4).map(({ label, href, icon: Icon, color }) => (
+                    {NAV_ITEMS.slice(5).map(({ label, href, icon: Icon, color }) => (
                       <Link key={href} href={href}
                         onClick={() => more.leave()}
                         className={cn(

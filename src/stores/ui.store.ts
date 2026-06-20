@@ -13,17 +13,19 @@ interface UIStore {
   sidebarOpen: boolean;
   navMobileOpen: boolean;
   smartDefaults: SmartDefaults;
-  // ── Single-select (kept for useAnalytics backward compat) ──
+  drawerCount: number;
+
+  // ── Single-select for useAnalytics backward compat ─────────
   dashboardCurrencyFilter: string;
   setDashboardCurrencyFilter: (code: string) => void;
-  // ── Global multi-select currency filter ────────────────────
-  // empty array = "All currencies"
-  globalCurrencies: string[];
-  setGlobalCurrencies: (codes: string[]) => void;
-  toggleGlobalCurrency: (code: string) => void;
-  clearGlobalCurrencies: () => void;
-  // ── Drawer tracking (FAB hide) ─────────────────────────────
-  drawerCount: number;
+
+  // ── Global currency filter: simple single-select ────────────
+  // ""     = not yet set → pages default to base currency
+  // "all"  = All currencies
+  // "KWD"  = only that currency
+  globalCurrency: string;
+  setGlobalCurrency: (code: string) => void;  // pass "all" or a currency code
+
   openQuickAdd: () => void;
   closeQuickAdd: () => void;
   toggleCommand: () => void;
@@ -41,9 +43,9 @@ export const useUIStore = create<UIStore>((set, get) => ({
   sidebarOpen: false,
   navMobileOpen: false,
   smartDefaults: {},
-  dashboardCurrencyFilter: "",
-  globalCurrencies: [],
   drawerCount: 0,
+  dashboardCurrencyFilter: "",
+  globalCurrency: "",          // empty = use base currency (set by pages on first mount)
 
   openQuickAdd:    () => set({ quickAddOpen: true }),
   closeQuickAdd:   () => set({ quickAddOpen: false }),
@@ -54,32 +56,19 @@ export const useUIStore = create<UIStore>((set, get) => ({
   setSmartDefaults: (defaults) =>
     set({ smartDefaults: { ...get().smartDefaults, ...defaults } }),
 
-  // Single-select setter (backward compat for useAnalytics)
   setDashboardCurrencyFilter: (code) => set({ dashboardCurrencyFilter: code }),
 
-  // Multi-select: set exact list; also sync dashboardCurrencyFilter to first item
-  setGlobalCurrencies: (codes) => {
+  // Set global currency + keep dashboardCurrencyFilter in sync for useAnalytics
+  setGlobalCurrency: (code) => {
     set({
-      globalCurrencies: codes,
-      dashboardCurrencyFilter: codes.length === 1 ? codes[0] : (codes[0] ?? get().dashboardCurrencyFilter),
+      globalCurrency: code,
+      // When a specific currency is selected: sync the chart filter to match.
+      // When "all" or empty is selected: RESET to "" so useAnalytics defaults
+      // cleanly to the base currency and never mixes stale single-currency data
+      // into cross-currency chart computations.
+      dashboardCurrencyFilter: (code && code !== "all") ? code : "",
     });
   },
-
-  // Toggle one currency on/off in the multi-select list
-  toggleGlobalCurrency: (code) => {
-    const current = get().globalCurrencies;
-    const next = current.includes(code)
-      ? current.filter((c) => c !== code)
-      : [...current, code];
-    set({
-      globalCurrencies: next,
-      // sync single-select for useAnalytics when exactly one is selected
-      dashboardCurrencyFilter: next.length >= 1 ? next[0] : get().dashboardCurrencyFilter,
-    });
-  },
-
-  // "All currencies" — clear selection
-  clearGlobalCurrencies: () => set({ globalCurrencies: [] }),
 
   openDrawer:  () => set((s) => ({ drawerCount: s.drawerCount + 1 })),
   closeDrawer: () => set((s) => ({ drawerCount: Math.max(0, s.drawerCount - 1) })),
