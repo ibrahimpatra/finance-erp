@@ -15,6 +15,7 @@ export interface Settings {
   currencyName: string;
   currencyCode: string;
   currencySymbol: string;
+  attributionMode?: "auto" | "prompt"; // NEW — how expenses match to incomes
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -41,6 +42,8 @@ export interface Income {
   notes?: string;
   tagIds: string[];
   currencyCode?: string; // multi-currency support
+  accountId?: string;          // NEW — which bank account this income is deposited into
+  incomeSourceTypeId?: string; // NEW — links to IncomeSourceType (richer categorisation)
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -55,7 +58,12 @@ export interface Expense {
   notes?: string;
   expenseTypeId: string;
   tagIds: string[];
-  currencyCode?: string; // multi-currency support
+  currencyCode?: string;   // multi-currency support
+  accountId?: string;      // which bank account this expense debits
+  /** NEW — true for system-generated shortfall-adjustment expenses.
+   *  These cannot be deleted by the user, only reassigned to another
+   *  income in the same account with balance > 0. */
+  isSystemGenerated?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -91,6 +99,8 @@ export interface Transfer {
   fromCurrencyCode?: string;
   toCurrencyCode?: string;
   note?: string;
+  fromAccountId?: string;  // NEW — account-level transfer source
+  toAccountId?: string;    // NEW — account-level transfer destination
   createdAt: Timestamp;
 }
 
@@ -103,7 +113,9 @@ export type TransactionType =
   | "EXPENSE_REASSIGNED"
   | "REFUND"
   | "INCOME_ADJUSTMENT"
-  | "OPENING_BALANCE";
+  | "OPENING_BALANCE"
+  | "SHORTFALL_CREATED"   // NEW — expense exceeded available income balance; remainder tracked at account level
+  | "SHORTFALL_RESOLVED"; // NEW — a later income (or manual action) covered an outstanding shortfall
 
 export type LedgerDirection = "CREDIT" | "DEBIT";
 
@@ -115,6 +127,7 @@ export interface LedgerEntry {
   expenseId?: string;
   transferId?: string;
   spentById?: string;
+  accountId?: string;  // NEW — which bank account this entry belongs to
   amount: number;
   direction: LedgerDirection;
   description: string;
@@ -217,12 +230,13 @@ export interface TagAnalytics {
 }
 
 export interface SearchResult {
-  type: "income" | "expense" | "spentBy" | "tag" | "transfer";
-  id: string;
-  title: string;
-  subtitle?: string;
-  amount?: number;
-  date?: Timestamp;
+  type:         "income" | "expense" | "spentBy" | "tag" | "transfer";
+  id:           string;
+  title:        string;
+  subtitle?:    string;
+  amount?:      number;
+  currencyCode?: string;  // FIX: was missing — caused base-currency label on search result amounts
+  date?:        Timestamp;
 }
 
 export interface ExpenseFilters {
@@ -240,17 +254,34 @@ export interface ExpenseFilters {
 export type ExportFormat = "csv" | "json" | "excel";
 
 export type IncomeFormData = Omit<Income, "id" | "userId" | "createdAt" | "updatedAt">;
-export type ExpenseFormData = Omit<Expense, "id" | "userId" | "createdAt" | "updatedAt">;
-export type SpentByFormData = Omit<SpentBy, "id" | "userId" | "createdAt" | "updatedAt">;
-export type TagFormData = Omit<Tag, "id" | "userId" | "createdAt">;
-export type TransferFormData = Omit<Transfer, "id" | "userId" | "createdAt">;
-export type ExpenseTypeFormData = Omit<ExpenseType, "id" | "userId" | "createdAt" | "updatedAt">;
-export type SettingsFormData = Omit<Settings, "id" | "userId" | "createdAt" | "updatedAt">;
+
+// incomeSourceId is intentionally optional here.
+// The expense form always resolves it via FIFO before calling the service,
+// but callers that already have it (edit, reassign) pass it directly.
+// The service MUST receive it populated — the form guarantees this.
+export interface ExpenseFormData {
+  incomeSourceId?: string; // resolved before Firestore write (FIFO or manual)
+  accountId?:      string; // NEW — which bank account is debited
+  spentById:       string;
+  amount:          number;
+  reason:          string;
+  notes?:          string;
+  expenseTypeId:   string;
+  tagIds:          string[];
+  currencyCode?:   string;
+}
+
+export type SpentByFormData      = Omit<SpentBy,  "id" | "userId" | "createdAt" | "updatedAt">;
+export type TagFormData          = Omit<Tag,       "id" | "userId" | "createdAt">;
+export type TransferFormData     = Omit<Transfer,  "id" | "userId" | "createdAt">;
+export type ExpenseTypeFormData  = Omit<ExpenseType, "id" | "userId" | "createdAt" | "updatedAt">;
+export type SettingsFormData     = Omit<Settings,  "id" | "userId" | "createdAt" | "updatedAt">;
 
 export const DEFAULT_SETTINGS: SettingsFormData = {
   currencyName: "Kuwaiti Dinar",
   currencyCode: "KWD",
   currencySymbol: "KD",
+  attributionMode: "auto",
 };
 
 export const INCOME_SOURCES = [
@@ -321,3 +352,76 @@ export const PRESET_CURRENCIES = [
   { name: "Indian Rupee", code: "INR", symbol: "₹" },
   { name: "Canadian Dollar", code: "CAD", symbol: "CA$" },
 ] as const;
+
+// ─── Bank Accounts ───────────────────────────────────────────────
+export type AccountType = "checking" | "savings" | "cash" | "wallet" | "credit";
+
+export const ACCOUNT_TYPES: { value: AccountType; label: string; icon: string }[] = [
+  { value: "checking", label: "Checking", icon: "🏦" },
+  { value: "savings",  label: "Savings",  icon: "💰" },
+  { value: "cash",     label: "Cash",     icon: "💵" },
+  { value: "wallet",   label: "Wallet",   icon: "👜" },
+  { value: "credit",   label: "Credit",   icon: "💳" },
+];
+
+// Bank name is now free-text (no hardcoded country-specific bank list).
+// Kept as an empty const for backward import-compatibility — safe no-op.
+export const KNOWN_BANKS: readonly string[] = [];
+
+export interface BankAccount {
+  id: string;
+  userId: string;
+  name: string;
+  bankName?: string;
+  accountType: AccountType;
+  lastFourDigits?: string;
+  currencyCode: string;   // locked at creation — never changes
+  color: string;
+  icon?: string;
+  isActive: boolean;
+  isDefault: boolean;
+  notes?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export type BankAccountFormData = Omit<BankAccount, "id" | "userId" | "createdAt" | "updatedAt"> & {
+  /** NEW — optional starting balance, only used at account creation. Writes a single
+   *  OPENING_BALANCE ledger entry tied to the account (not any income). Never required. */
+  openingBalance?: number;
+};
+
+/**
+ * BankAccount enriched with computed balance derived from linked incomes.
+ * Balance = sum of IncomeWithBalance.balance for all incomes where income.accountId === account.id.
+ * This intentionally uses the existing ledger-based income balance so NO ledger data is ever
+ * touched or migrated — the account balance is a real-time aggregate view.
+ */
+export interface BankAccountWithBalance extends BankAccount {
+  balance: number;
+  totalIncome: number;
+  totalExpenses: number;
+  incomeCount: number;
+  expenseCount: number;
+  attributionRate: number; // 0–100%: what % of income has been attributed to expenses
+  outstandingShortfall: number; // NEW — amount currently uncovered by any income (account-level overdraft)
+}
+
+// ─── Expense Income Allocations (FIFO Attribution) ───────────────
+// These records are DISPLAY-ONLY. They track which income entries "funded" which
+// expenses via FIFO. They never affect ledger entries or balances.
+export interface ExpenseIncomeAllocation {
+  id: string;
+  userId: string;
+  accountId: string;
+  expenseId: string;
+  incomeId: string;
+  amount: number;
+  isAutoMapped: boolean; // true = FIFO auto, false = manually set by user
+  createdAt: Timestamp;
+}
+
+export type AllocationFormData = Omit<ExpenseIncomeAllocation, "id" | "userId" | "createdAt">;
+
+// Sentinel — written when expense amount exceeds all available income in the account
+export const UNATTRIBUTED_SENTINEL = "__unattributed__";

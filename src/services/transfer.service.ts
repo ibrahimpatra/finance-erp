@@ -4,7 +4,9 @@ import {
 import { db } from "@/lib/firebase/config";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { Transfer, TransferFormData } from "@/types";
-import { createLedgerEntry, calculateBalanceForIncome, getAllLedgerEntries } from "./ledger.service";
+import {
+  createLedgerEntry, calculateBalanceFromLedger, getLedgerForIncome,
+} from "./ledger.service";
 import { logAudit } from "./audit.service";
 
 export async function getTransfers(userId: string): Promise<Transfer[]> {
@@ -14,8 +16,10 @@ export async function getTransfers(userId: string): Promise<Transfer[]> {
 }
 
 export async function createTransfer(userId: string, data: TransferFormData): Promise<string> {
-  const allEntries = await getAllLedgerEntries(userId);
-  const fromBalance = calculateBalanceForIncome(allEntries, data.fromIncomeId);
+  // FIX: was getAllLedgerEntries(userId) — fetched the entire user ledger (could be 1000s of docs)
+  // just to check one income source's balance. Now fetches only that income's entries.
+  const fromEntries = await getLedgerForIncome(userId, data.fromIncomeId);
+  const fromBalance = calculateBalanceFromLedger(fromEntries);
 
   if (fromBalance < data.amount) {
     throw new Error(`Insufficient balance. Available: ${fromBalance.toFixed(3)}`);

@@ -12,6 +12,7 @@ interface CreateLedgerEntryParams {
   expenseId?: string;
   transferId?: string;
   spentById?: string;
+  accountId?: string;  // NEW — which bank account this entry belongs to (optional, additive)
   amount: number;
   direction: LedgerDirection;
   description: string;
@@ -41,6 +42,17 @@ export async function getAllLedgerEntries(userId: string): Promise<LedgerEntry[]
   const q = query(
     collection(db, COLLECTIONS.LEDGER(userId)),
     orderBy("createdAt", "desc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LedgerEntry));
+}
+
+// NEW — all ledger entries tied to a bank account (used by the shortfall engine
+// and opening-balance display). Filters by accountId, not incomeSourceId.
+export async function getLedgerForAccount(userId: string, accountId: string): Promise<LedgerEntry[]> {
+  const q = query(
+    collection(db, COLLECTIONS.LEDGER(userId)),
+    where("accountId", "==", accountId)
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LedgerEntry));

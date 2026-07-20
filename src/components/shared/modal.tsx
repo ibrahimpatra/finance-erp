@@ -68,8 +68,10 @@ export function Modal({
                 </button>
               </div>
 
-              {/* Body */}
-              <div className="px-6 py-5">
+              {/* Body — FIX: was unbounded height, causing tall forms (like
+                  bank account configuration) to overflow the viewport on
+                  small screens with no way to scroll. Now capped and scrollable. */}
+              <div className="px-6 py-5 overflow-y-auto" style={{ maxHeight: "75dvh" }}>
                 {children}
               </div>
             </motion.div>

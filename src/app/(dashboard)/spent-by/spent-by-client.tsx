@@ -1,17 +1,23 @@
 "use client";
+import { useEffect } from "react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { spentBySchema, SpentBySchema } from "@/lib/validations/spent-by";
 import { useSpentBy } from "@/hooks/use-spent-by";
 import { useExpenses } from "@/hooks/use-expenses";
+import { useCurrencies } from "@/hooks/use-currencies";
 import { useAuthStore } from "@/stores/auth.store";
 import { useSpentByStore } from "@/stores/spent-by.store";
+import { useUIStore } from "@/stores/ui.store";
+import { useSettingsStore } from "@/stores/settings.store";
 import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
+import { GlobalCurrencyFilter, useCurrencyFilter } from "@/components/shared/global-currency-filter";
+import { MultiCurrencyAmount, groupByCurrency } from "@/components/shared/multi-currency-amount";
 import { AVATAR_COLORS, SpentBy } from "@/types";
 import { getInitials } from "@/lib/utils/helpers";
 import Link from "next/link";
@@ -21,34 +27,50 @@ import { motion, AnimatePresence } from "framer-motion";
 const inp = "w-full px-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all";
 
 export function SpentByPageClient() {
-  const { user } = useAuthStore();
+  const { user }     = useAuthStore();
   const { spentBys, loading } = useSpentBy();
   const { expenses } = useExpenses();
+  const { settings, fetched } = useSettingsStore();
+  const defaultCode  = settings?.currencyCode ?? "";
+  useCurrencies();
   const { addSpentBy, editSpentBy, removeSpentBy } = useSpentByStore();
-  const { format } = useCurrency();
-  const { toast } = useToast();
-  const [showForm, setShowForm] = useState(false);
-  const [editTarget, setEditTarget] = useState<SpentBy | null>(null);
+  const { formatFor } = useCurrency();
+  const { toast }    = useToast();
+  const { globalCurrency, setGlobalCurrency } = useUIStore();
+
+  useEffect(() => {
+    if (!fetched || !defaultCode) return;
+    if (globalCurrency !== "all") {
+      setGlobalCurrency(defaultCode);
+    }
+  }, [fetched, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { matches: matchesCurrency } = useCurrencyFilter();
+
+  const [showForm,     setShowForm]     = useState(false);
+  const [editTarget,   setEditTarget]   = useState<SpentBy | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SpentBy | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [deleting,     setDeleting]     = useState(false);
   const [selectedColor, setSelectedColor] = useState<string>(AVATAR_COLORS[0]);
 
-  const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<SpentBySchema>({
-    resolver: zodResolver(spentBySchema),
-    defaultValues: { isActive: true },
-  });
+  const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } =
+    useForm<SpentBySchema>({ resolver: zodResolver(spentBySchema), defaultValues: { isActive: true } });
 
   const onSubmit = async (data: SpentBySchema) => {
     if (!user) return;
     const payload = { ...data, avatarColor: selectedColor };
-    if (editTarget) {
-      await editSpentBy(user.uid, editTarget.id, payload, editTarget);
-      toast("Updated!", "success");
-    } else {
-      await addSpentBy(user.uid, payload);
-      toast("Person added!", "success");
+    try {
+      if (editTarget) {
+        await editSpentBy(user.uid, editTarget.id, payload, editTarget);
+        toast("Updated!", "success");
+      } else {
+        await addSpentBy(user.uid, payload);
+        toast("Person added!", "success");
+      }
+      reset(); setShowForm(false); setEditTarget(null); setSelectedColor(AVATAR_COLORS[0]);
+    } catch (e: unknown) {
+      toast((e as Error).message || "Failed to save.", "error");
     }
-    reset(); setShowForm(false); setEditTarget(null); setSelectedColor(AVATAR_COLORS[0]);
   };
 
   const startEdit = (person: SpentBy) => {
@@ -73,11 +95,19 @@ export function SpentByPageClient() {
     setDeleting(false); setDeleteTarget(null);
   };
 
+  // Stats: returns per-currency groups so multi-currency displays correctly
   const getStats = (personId: string) => {
-    const personExpenses = expenses.filter((e) => e.spentById === personId);
+    const personExpenses = expenses.filter(
+      (e) => e.spentById === personId && matchesCurrency(e.currencyCode || defaultCode)
+    );
     return {
       count: personExpenses.length,
-      total: personExpenses.reduce((a, e) => a + e.amount, 0),
+      currencyAmounts: groupByCurrency(
+        personExpenses,
+        (e) => e.amount,
+        (e) => e.currencyCode,
+        defaultCode
+      ),
     };
   };
 
@@ -93,6 +123,9 @@ export function SpentByPageClient() {
           <Plus className="w-4 h-4" /> Add Person
         </button>
       </div>
+
+      {/* ── Global currency filter ────────────────────────────── */}
+      <GlobalCurrencyFilter />
 
       <AnimatePresence>
         {showForm && (
@@ -126,8 +159,12 @@ export function SpentByPageClient() {
                 <input {...register("notes")} placeholder="Optional notes…" className={inp} />
               </div>
               <div className="flex gap-3">
-                <button type="button" onClick={() => { setShowForm(false); reset(); setEditTarget(null); }} className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors">Cancel</button>
-                <button type="submit" disabled={isSubmitting} className="flex-1 flex items-center justify-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-all">
+                <button type="button" onClick={() => { setShowForm(false); reset(); setEditTarget(null); }}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isSubmitting}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-all">
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   {editTarget ? "Save Changes" : "Add Person"}
                 </button>
@@ -140,7 +177,12 @@ export function SpentByPageClient() {
       {loading ? <TableSkeleton rows={4} /> : spentBys.length === 0 ? (
         <EmptyState icon={Users} title="No people added yet"
           description="Add people who spend money — family members, employees, or yourself."
-          action={<button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-all"><Plus className="w-4 h-4" />Add first person</button>} />
+          action={
+            <button onClick={() => setShowForm(true)}
+              className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-all">
+              <Plus className="w-4 h-4" /> Add first person
+            </button>
+          } />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {spentBys.map((person) => {
@@ -154,27 +196,48 @@ export function SpentByPageClient() {
                       {getInitials(person.name)}
                     </div>
                     <div>
-                      <Link href={`/spent-by/${person.id}`} className="font-semibold text-foreground hover:text-primary transition-colors">{person.name}</Link>
-                      {person.phone && <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5"><Phone className="w-3 h-3" />{person.phone}</div>}
+                      <Link href={`/spent-by/${person.id}`}
+                        className="font-semibold text-foreground hover:text-primary transition-colors">
+                        {person.name}
+                      </Link>
+                      {person.phone && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                          <Phone className="w-3 h-3" />{person.phone}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => startEdit(person)} className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"><Edit3 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => setDeleteTarget(person)} className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => startEdit(person)}
+                      className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setDeleteTarget(person)}
+                      className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border">
-                  <div>
-                    <div className="amount-display text-base font-bold text-foreground">{format(stats.total)}</div>
-                    <div className="text-xs text-muted-foreground">Total spent</div>
+                <div className="mt-3 pt-3 border-t border-border space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{stats.count} transaction{stats.count !== 1 ? "s" : ""}</span>
+                    <span>Total spent</span>
                   </div>
-                  <div>
-                    <div className="text-base font-bold text-foreground">{stats.count}</div>
-                    <div className="text-xs text-muted-foreground">Transactions</div>
-                  </div>
+                  {stats.currencyAmounts.length > 0 ? (
+                    <MultiCurrencyAmount
+                      groups={stats.currencyAmounts}
+                      amountClassName="text-sm font-bold text-foreground"
+                      negative={false}
+                      layout="stack"
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No expenses yet</span>
+                  )}
                 </div>
                 {!person.isActive && (
-                  <span className="text-xs px-2 py-0.5 bg-muted rounded-full text-muted-foreground mt-2 inline-block">Inactive</span>
+                  <span className="text-xs px-2 py-0.5 bg-muted rounded-full text-muted-foreground mt-2 inline-block">
+                    Inactive
+                  </span>
                 )}
               </div>
             );
@@ -182,8 +245,8 @@ export function SpentByPageClient() {
         </div>
       )}
 
-      <ConfirmDialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete}
-        loading={deleting} title="Remove Person"
+      <ConfirmDialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete} loading={deleting} title="Remove Person"
         description={`Remove "${deleteTarget?.name}"? This only works if they have no linked expenses.`}
         confirmLabel="Remove" />
     </div>

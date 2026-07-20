@@ -1,21 +1,22 @@
 "use client";
 import { useEffect } from "react";
-import { useIncome } from "@/hooks/use-income";
-import { useExpenses } from "@/hooks/use-expenses";
-import { useSpentBy } from "@/hooks/use-spent-by";
-import { useTags } from "@/hooks/use-tags";
-import { useTransfers } from "@/hooks/use-transfers";
+import { useIncome }     from "@/hooks/use-income";
+import { useExpenses }   from "@/hooks/use-expenses";
+import { useSpentBy }    from "@/hooks/use-spent-by";
+import { useTags }       from "@/hooks/use-tags";
+import { useTransfers }  from "@/hooks/use-transfers";
 import { useExpenseTypes } from "@/hooks/use-expense-types";
 import { useCurrencies } from "@/hooks/use-currencies";
-import { useUIStore } from "@/stores/ui.store";
+import { useBankAccounts } from "@/hooks/use-bank-accounts";
+import { useUIStore }    from "@/stores/ui.store";
 import { useSettingsStore } from "@/stores/settings.store";
-import { useIncomeStore } from "@/stores/income.store";
-import { useExpenseStore } from "@/stores/expense.store";
-import { useCurrencyStore } from "@/stores/currency.store";
-import { StatsCards } from "@/components/dashboard/stats-cards";
+import { StatsCards }    from "@/components/dashboard/stats-cards";
 import { IncomeOverview } from "@/components/dashboard/income-overview";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { ExpensePieChart, MonthlyTrendChart, SpendingByPersonChart } from "@/components/dashboard/expense-chart";
+import { GlobalCurrencyFilter } from "@/components/shared/global-currency-filter";
+import { MigrationBanner } from "@/components/shared/migration-banner";
+import { CurrencySetupBanner } from "@/components/shared/currency-setup-banner";
 
 export function DashboardClient() {
   useIncome();
@@ -25,74 +26,67 @@ export function DashboardClient() {
   useTransfers();
   useExpenseTypes();
   useCurrencies();
+  const { accounts } = useBankAccounts();
 
-  const { incomes }    = useIncomeStore();
-  const { expenses }   = useExpenseStore();
-  const { currencies } = useCurrencyStore();
-  const { settings }   = useSettingsStore();
-  const { dashboardCurrencyFilter, setDashboardCurrencyFilter } = useUIStore();
+  const { settings, fetched }   = useSettingsStore();
+  const { globalCurrency, setGlobalCurrency, setDashboardCurrencyFilter } = useUIStore();
+  const defaultCode    = settings?.currencyCode ?? "";
 
-  const defaultCode = settings?.currencyCode ?? "KWD";
+  // FIX: wait until settings are actually fetched before touching globalCurrency.
+  // Previously: defaultCode = settings?.currencyCode ?? "KWD" fired during loading
+  // (settings = null) → wrote "KWD" into globalCurrency → when real currency
+  // arrived, !globalCurrency was false so it never updated. Now we wait.
+  // Also corrects the case where "KWD" was written stale and the real currency
+  // is something else — we reset it once fetched.
+  useEffect(() => {
+    // FIX: wait for BOTH fetched=true AND a real defaultCode.
+    // Previously used `defaultCode || "all"` — for new users with no settings
+    // yet, defaultCode="" so globalCurrency was set to "all". Then when they
+    // picked INR via the banner, the condition `globalCurrency !== "all"`
+    // prevented the update. Now we simply wait until we have a real currency.
+    if (!fetched || !defaultCode) return;
+    if (globalCurrency !== "all") {
+      setGlobalCurrency(defaultCode);
+    }
+  }, [fetched, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!dashboardCurrencyFilter) setDashboardCurrencyFilter(defaultCode);
-  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (globalCurrency && globalCurrency !== "all") {
+      setDashboardCurrencyFilter(globalCurrency);
+    }
+  }, [globalCurrency, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const usedCodes = Array.from(new Set([
-    defaultCode,
-    ...incomes.map((i) => i.currencyCode || defaultCode),
-    ...expenses.map((e) => e.currencyCode || defaultCode),
-  ])).filter(Boolean);
-
-  const filterCodes = Array.from(new Set([
-    defaultCode,
-    ...currencies.map((c) => c.code),
-    ...usedCodes,
-  ]));
-
-  const activeCurrency = dashboardCurrencyFilter || defaultCode;
+  const displayLabel = globalCurrency === "all"
+    ? "All currencies"
+    : (globalCurrency || defaultCode || "…");
 
   return (
     <div className="space-y-6 animate-fade-in">
 
       {/* ── Page header ──────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Overview</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Viewing <span className="font-semibold text-foreground">{activeCurrency}</span> · select a currency to switch view
+            Viewing <span className="font-semibold text-foreground">{displayLabel}</span>
           </p>
         </div>
-
-        {/* Currency pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground">Currency:</span>
-          {filterCodes.map((code) => (
-            <button
-              key={code}
-              onClick={() => setDashboardCurrencyFilter(code)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                activeCurrency === code
-                  ? "bg-primary text-white border-primary shadow-sm shadow-primary/20"
-                  : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              {code}
-            </button>
-          ))}
-        </div>
+        <GlobalCurrencyFilter />
       </div>
 
-      {/* ── Stats ────────────────────────────────────────────── */}
+      {/* New-user currency setup — only ever shown when no settings doc exists yet */}
+      <CurrencySetupBanner />
+
+      {/* Migration banner — shows once for users with incomes but no accounts yet */}
+      <MigrationBanner show={accounts.length === 0} />
+
       <StatsCards />
 
-      {/* ── Income + Recent side by side ─────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <IncomeOverview />
         <RecentTransactions />
       </div>
 
-      {/* ── Charts ───────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <MonthlyTrendChart />
         <ExpensePieChart />

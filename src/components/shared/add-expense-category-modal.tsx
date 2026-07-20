@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { expenseTypeSchema, ExpenseTypeSchema } from "@/lib/validations/expense-type";
 import { Modal } from "./modal";
+import { CategoryForm } from "./category-form";
 import { useAuthStore } from "@/stores/auth.store";
 import { useExpenseTypeStore } from "@/stores/expense-type.store";
-import { ColorPickerInput } from "./color-picker-input";
-import { Loader2 } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
@@ -13,76 +15,44 @@ interface Props {
   level?: 1 | 2 | 3;
 }
 
-const inp = "w-full px-3.5 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all";
-const QUICK_ICONS = ["🍔","🚗","⛽","🛍️","📄","📚","🏥","🎬","📈","🔄","📦","💊","✈️","🏡","🎮","☕","🧾","💡"];
-
 export function AddExpenseCategoryModal({ isOpen, onClose, onCreated, level = 1 }: Props) {
   const { user } = useAuthStore();
   const { addExpenseType } = useExpenseTypeStore();
+  const [color, setColor] = useState("#6b7280");
 
-  const [name,   setName]   = useState("");
-  const [icon,   setIcon]   = useState("📦");
-  const [color,  setColor]  = useState("#6b7280");
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState("");
+  const form = useForm<ExpenseTypeSchema>({
+    resolver: zodResolver(expenseTypeSchema),
+    defaultValues: { isActive: true, icon: "📦" },
+  });
 
-  const reset = () => { setName(""); setIcon("📦"); setColor("#6b7280"); setError(""); };
-
-  const handleSave = async () => {
+  const handleSubmit = async (data: ExpenseTypeSchema) => {
     if (!user) return;
-    if (!name.trim()) { setError("Name is required"); return; }
-    setSaving(true); setError("");
-    try {
-      const id = await addExpenseType(user.uid, { name: name.trim(), icon, color, isActive: true });
-      onCreated?.({ id, name: name.trim() });
-      reset(); onClose();
-    } catch (e: unknown) {
-      setError((e as Error).message);
-    } finally { setSaving(false); }
+    const id = await addExpenseType(user.uid, { ...data, color });
+    onCreated?.({ id, name: data.name });
+    form.reset({ isActive: true, icon: "📦" });
+    setColor("#6b7280");
+    onClose();
   };
 
-  const handleClose = () => { reset(); onClose(); };
+  const handleClose = () => {
+    form.reset({ isActive: true, icon: "📦" });
+    setColor("#6b7280");
+    onClose();
+  };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Add Expense Category"
-      description="Create a new category for expenses" level={level}>
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">Name *</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Food"
-            className={inp} onKeyDown={(e) => e.key === "Enter" && handleSave()} autoFocus />
-          {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">Icon</label>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {QUICK_ICONS.map((ic) => (
-              <button key={ic} type="button" onClick={() => setIcon(ic)}
-                className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all ${icon === ic ? "bg-primary/15 ring-2 ring-primary" : "bg-muted hover:bg-muted/80"}`}>
-                {ic}
-              </button>
-            ))}
-          </div>
-          <input value={icon} onChange={(e) => setIcon(e.target.value)}
-            placeholder="Or type any emoji" className={inp + " text-lg"} />
-        </div>
-
-        {/* ── react-colorful color picker ── */}
-        <ColorPickerInput label="Color" value={color} onChange={setColor} />
-
-        <div className="flex gap-3 pt-1">
-          <button type="button" onClick={handleClose}
-            className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors">
-            Cancel
-          </button>
-          <button type="button" onClick={handleSave} disabled={saving || !name.trim()}
-            className="flex-1 flex items-center justify-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-all">
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-            Add Category
-          </button>
-        </div>
-      </div>
+    <Modal isOpen={isOpen} onClose={handleClose}
+      title="Add Expense Category"
+      description="Create a new category for expenses"
+      level={level}>
+      <CategoryForm
+        form={form}
+        color={color}
+        onColorChange={setColor}
+        onSubmit={handleSubmit}
+        onCancel={handleClose}
+        submitLabel="Add Category"
+      />
     </Modal>
   );
 }

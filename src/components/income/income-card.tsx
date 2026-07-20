@@ -11,7 +11,7 @@ interface IncomeCardProps { income: IncomeWithBalance; }
 export function IncomeCard({ income }: IncomeCardProps) {
   const { formatFor } = useCurrency();
   const { settings } = useSettingsStore();
-  const defaultCode   = settings?.currencyCode ?? "KWD";
+  const defaultCode   = settings?.currencyCode ?? "";
   const { tags }      = useTags();
   const cur           = income.currencyCode || defaultCode;
   const incomeTags    = tags.filter((t) => income.tagIds.includes(t.id));

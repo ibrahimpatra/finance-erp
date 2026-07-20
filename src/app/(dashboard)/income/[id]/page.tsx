@@ -43,7 +43,7 @@ export default function IncomeDetailPage({ params }: { params: Promise<{ id: str
   const { toast }        = useToast();
   const router           = useRouter();
 
-  const defaultCode = settings?.currencyCode ?? "KWD";
+  const defaultCode = settings?.currencyCode ?? "";
 
   const [editing, setEditing]           = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);

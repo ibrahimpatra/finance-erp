@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useUIStore } from "@/stores/ui.store";
+import { useSettingsStore } from "@/stores/settings.store";
 import { useSearch } from "@/hooks/use-search";
 import { useRouter } from "next/navigation";
 import { Search, TrendingUp, Receipt, Users, Tag, ArrowLeftRight, X } from "lucide-react";
@@ -34,7 +35,9 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const results = useSearch(query);
   const router = useRouter();
-  const { format } = useCurrency();
+  const { formatFor } = useCurrency();
+  const { settings } = useSettingsStore();
+  const defaultCode = settings?.currencyCode ?? "";
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -84,7 +87,10 @@ export function CommandPalette() {
                       {r.subtitle && <div className="text-xs text-muted-foreground truncate">{r.subtitle}</div>}
                     </div>
                     {r.amount !== undefined && (
-                      <div className="text-sm font-semibold amount-display text-foreground shrink-0">{format(r.amount)}</div>
+                      <div className="text-sm font-semibold amount-display text-foreground shrink-0">
+                        {/* FIX (Phase 1): was format(r.amount) — always base currency */}
+                        {formatFor(r.amount, r.currencyCode || defaultCode)}
+                      </div>
                     )}
                   </button>
                 </li>

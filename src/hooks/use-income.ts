@@ -8,8 +8,11 @@ export function useIncome() {
   const store = useIncomeStore();
 
   useEffect(() => {
-    if (user?.uid) store.fetchIncomes(user.uid);
-  }, [user?.uid]);
+    // Guard: don't fire another fetch if one is already in flight.
+    // This prevents duplicate Firestore reads when multiple components
+    // mount simultaneously (e.g. dashboard + income-overview both call this).
+    if (user?.uid && !store.loading) store.fetchIncomes(user.uid);
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     ...store,

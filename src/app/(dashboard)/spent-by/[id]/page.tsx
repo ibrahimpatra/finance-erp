@@ -26,7 +26,7 @@ export default function SpentByProfilePage({ params }: { params: Promise<{ id: s
   const { settings }     = useSettingsStore();
   const { formatFor }    = useCurrency();
 
-  const defaultCode = settings?.currencyCode ?? "KWD";
+  const defaultCode = settings?.currencyCode ?? "";
   const [activeCurrency, setActiveCurrency] = useState(defaultCode);
 
   /* Collect all currencies used by this person's expenses */
