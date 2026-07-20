@@ -13,35 +13,31 @@ interface GlobalCurrencyFilterProps {
 }
 
 export function GlobalCurrencyFilter({ label = "Currency:", className }: GlobalCurrencyFilterProps) {
-  const { settings }   = useSettingsStore();
+  const { settings, fetched }   = useSettingsStore();
   const { currencies } = useCurrencyStore();
   const { incomes }    = useIncomeStore();
   const { expenses }   = useExpenseStore();
   const { globalCurrency, setGlobalCurrency } = useUIStore();
 
-  const defaultCode = settings?.currencyCode ?? "KWD";
+  // FIX: don't render at all until settings are fetched. Previously this used
+  // settings?.currencyCode ?? "KWD" — during the loading window (settings=null),
+  // that "KWD" got added to the chip list as if KWD were the user's real base
+  // currency. Once settings loaded with e.g. "USD", the filter had ["KWD","USD"]
+  // and the active selection was the stale KWD. Now we wait for fetched=true.
+  const defaultCode = settings?.currencyCode ?? "";
 
-  /**
-   * FIX (point 12): Previously only used configuredCodes (settings + currencies store).
-   * Users who had expenses/incomes in currencies they never explicitly configured
-   * would see the filter hidden (length <= 1) and their transactions invisible in "All" mode.
-   *
-   * Now: allCodes = union of configured codes + codes actually present in data.
-   * This ensures the filter appears and shows all relevant currencies regardless of
-   * whether the user has gone to Settings → Currencies to add them explicitly.
-   */
   const allCodes = useMemo(() => {
+    if (!fetched || !defaultCode) return [];
     const set = new Set<string>();
     set.add(defaultCode);
     currencies.forEach((c) => set.add(c.code));
-    // Scan actual transaction data for additional currencies
     incomes.forEach((i) => { if (i.currencyCode) set.add(i.currencyCode); });
     expenses.forEach((e) => { if (e.currencyCode) set.add(e.currencyCode); });
     return Array.from(set).sort();
-  }, [defaultCode, currencies, incomes, expenses]);
+  }, [fetched, defaultCode, currencies, incomes, expenses]);
 
-  // Only render when there are multiple currencies (configured or in data)
-  if (allCodes.length <= 1) return null;
+  // Don't render: settings not loaded yet, or only one currency in use
+  if (!fetched || allCodes.length <= 1) return null;
 
   const isAll      = globalCurrency === "all";
   const activeCode = isAll ? null : (globalCurrency || defaultCode);
@@ -92,14 +88,18 @@ export function GlobalCurrencyFilter({ label = "Currency:", className }: GlobalC
  */
 export function useCurrencyFilter() {
   const { globalCurrency } = useUIStore();
-  const { settings }       = useSettingsStore();
-  const defaultCode        = settings?.currencyCode ?? "KWD";
+  const { settings, fetched } = useSettingsStore();
+  const defaultCode = settings?.currencyCode ?? "";
+
+  // "All" when:
+  //  - user explicitly clicked All
+  //  - settings not loaded yet (don't hide anything during load)
+  //  - settings loaded but no currency configured yet (new user pre-banner)
+  const isAll = globalCurrency === "all" || !fetched || !defaultCode;
 
   const resolvedCode = (globalCurrency && globalCurrency !== "all")
     ? globalCurrency
     : defaultCode;
-
-  const isAll = globalCurrency === "all";
 
   const matches = (code?: string | null) => {
     if (isAll) return true;
@@ -111,10 +111,5 @@ export function useCurrencyFilter() {
     isAll,
     activeCode: isAll ? null : resolvedCode,
   };
-}
-
-interface GlobalCurrencyFilterProps {
-  label?: string;
-  className?: string;
 }
 

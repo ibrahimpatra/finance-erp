@@ -8,23 +8,36 @@ import { getAllLedgerEntries } from "./ledger.service";
 
 export async function generateMonthlySnapshot(userId: string, month: number, year: number): Promise<void> {
   const entries = await getAllLedgerEntries(userId);
+
   const monthEntries = entries.filter((e) => {
     const d = e.createdAt.toDate();
     return d.getMonth() + 1 === month && d.getFullYear() === year;
   });
 
-  let income = 0, expenses = 0, transfers = 0, refunds = 0;
+  // FIX (Phase 3): opening balance was hardcoded to 0 regardless of prior
+  // activity, and the closing balance formula ignored transfers entirely.
+  // Opening balance is now the real net of every entry before this month.
+  const openingBalance = entries
+    .filter((e) => {
+      const d = e.createdAt.toDate();
+      return d.getFullYear() < year || (d.getFullYear() === year && d.getMonth() + 1 < month);
+    })
+    .reduce((acc, e) => acc + (e.direction === "CREDIT" ? e.amount : -e.amount), 0);
+
+  let income = 0, expenses = 0, transfersOut = 0, refunds = 0;
   for (const e of monthEntries) {
     if (e.transactionType === "INCOME_CREATED" && e.direction === "CREDIT") income += e.amount;
     if (e.transactionType === "EXPENSE_CREATED" && e.direction === "DEBIT") expenses += e.amount;
-    if (e.transactionType === "TRANSFER") transfers += e.direction === "DEBIT" ? e.amount : 0;
+    if (e.transactionType === "TRANSFER" && e.direction === "DEBIT") transfersOut += e.amount;
     if (e.transactionType === "REFUND") refunds += e.amount;
   }
 
+  const closingBalance = openingBalance + income - expenses - transfersOut + refunds;
+
   const snapshotId = `${year}-${String(month).padStart(2, "0")}`;
   await setDoc(doc(db, COLLECTIONS.MONTHLY_SNAPSHOTS(userId), snapshotId), {
-    userId, month, year, income, expenses, transfers, refunds,
-    openingBalance: 0, closingBalance: income - expenses + refunds,
+    userId, month, year, income, expenses, transfers: transfersOut, refunds,
+    openingBalance, closingBalance,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   });
 }

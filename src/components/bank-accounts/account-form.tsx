@@ -1,9 +1,8 @@
 "use client";
-import { useState } from "react";
 import { useForm }  from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { bankAccountSchema, BankAccountSchema } from "@/lib/validations/bank-account";
-import { ACCOUNT_TYPES, KNOWN_BANKS } from "@/types";
+import { ACCOUNT_TYPES } from "@/types";
 import { ColorPickerInput } from "@/components/shared/color-picker-input";
 import { useCurrencies }    from "@/hooks/use-currencies";
 import { useSettingsStore } from "@/stores/settings.store";
@@ -27,7 +26,7 @@ export function AccountForm({
 }: AccountFormProps) {
   const { settings }   = useSettingsStore();
   const { currencies } = useCurrencies();
-  const defaultCode    = settings?.currencyCode ?? "KWD";
+  const defaultCode    = settings?.currencyCode ?? "";
 
   const allCurrencies = [
     { code: defaultCode, name: settings?.currencyName ?? "Default", symbol: settings?.currencySymbol ?? "" },
@@ -51,14 +50,7 @@ export function AccountForm({
 
   const color    = watch("color") ?? "#3b82f6";
   const selType  = watch("accountType");
-
-  const [bankSearch, setBankSearch] = useState(defaultValues?.bankName ?? "");
-
-  const filteredBanks = bankSearch.length > 0
-    ? KNOWN_BANKS.filter((b) =>
-        b.toLowerCase().includes(bankSearch.toLowerCase())
-      )
-    : KNOWN_BANKS;
+  const isCreate = !defaultValues; // opening balance only makes sense at creation
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
@@ -73,7 +65,7 @@ export function AccountForm({
       {/* Account Type */}
       <div className="space-y-1.5">
         <label className="text-sm font-medium">Account Type *</label>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {ACCOUNT_TYPES.map((t) => (
             <button
               key={t.value} type="button"
@@ -124,26 +116,35 @@ export function AccountForm({
         </div>
       </div>
 
-      {/* Bank Name — searchable */}
+      {/* Bank Name — free text, no hardcoded list (works for any country/bank) */}
       <div className="space-y-1.5">
         <label className="text-sm font-medium">Bank Name</label>
         <input
-          placeholder="Search banks or type custom name…"
-          value={bankSearch}
-          onChange={(e) => {
-            setBankSearch(e.target.value);
-            setValue("bankName", e.target.value);
-          }}
+          {...register("bankName")}
+          placeholder="e.g. Chase, HSBC, or your local bank…"
           className={inp}
-          list="bank-list"
         />
-        <datalist id="bank-list">
-          {filteredBanks.map((b) => (
-            <option key={b} value={b} />
-          ))}
-        </datalist>
-        <input type="hidden" {...register("bankName")} />
       </div>
+
+      {/* Opening Balance — NEW, optional, create-only */}
+      {isCreate && (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">
+            Opening Balance <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+          </label>
+          <input
+            {...register("openingBalance")}
+            type="number"
+            step="0.001"
+            placeholder="0.000"
+            className={inp}
+          />
+          <p className="text-xs text-muted-foreground">
+            If this account already has money in it, enter the starting balance here.
+            Leave blank to start at zero.
+          </p>
+        </div>
+      )}
 
       {/* Color + Icon */}
       <div className="grid grid-cols-2 gap-4">

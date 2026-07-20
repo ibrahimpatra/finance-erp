@@ -58,8 +58,12 @@ export interface Expense {
   notes?: string;
   expenseTypeId: string;
   tagIds: string[];
-  currencyCode?: string; // multi-currency support
-  accountId?: string;    // NEW — which bank account this expense debits
+  currencyCode?: string;   // multi-currency support
+  accountId?: string;      // which bank account this expense debits
+  /** NEW — true for system-generated shortfall-adjustment expenses.
+   *  These cannot be deleted by the user, only reassigned to another
+   *  income in the same account with balance > 0. */
+  isSystemGenerated?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -109,7 +113,9 @@ export type TransactionType =
   | "EXPENSE_REASSIGNED"
   | "REFUND"
   | "INCOME_ADJUSTMENT"
-  | "OPENING_BALANCE";
+  | "OPENING_BALANCE"
+  | "SHORTFALL_CREATED"   // NEW — expense exceeded available income balance; remainder tracked at account level
+  | "SHORTFALL_RESOLVED"; // NEW — a later income (or manual action) covered an outstanding shortfall
 
 export type LedgerDirection = "CREDIT" | "DEBIT";
 
@@ -358,26 +364,9 @@ export const ACCOUNT_TYPES: { value: AccountType; label: string; icon: string }[
   { value: "credit",   label: "Credit",   icon: "💳" },
 ];
 
-export const KNOWN_BANKS = [
-  "National Bank of Kuwait (NBK)",
-  "Kuwait Finance House (KFH)",
-  "Gulf Bank",
-  "Commercial Bank of Kuwait",
-  "Burgan Bank",
-  "Al Ahli Bank of Kuwait",
-  "Boubyan Bank",
-  "Warba Bank",
-  "Ahli United Bank",
-  "Citibank Kuwait",
-  "HSBC Kuwait",
-  "Chase",
-  "Bank of America",
-  "Wells Fargo",
-  "Barclays",
-  "HSBC",
-  "Standard Chartered",
-  "Other",
-] as const;
+// Bank name is now free-text (no hardcoded country-specific bank list).
+// Kept as an empty const for backward import-compatibility — safe no-op.
+export const KNOWN_BANKS: readonly string[] = [];
 
 export interface BankAccount {
   id: string;
@@ -396,7 +385,11 @@ export interface BankAccount {
   updatedAt: Timestamp;
 }
 
-export type BankAccountFormData = Omit<BankAccount, "id" | "userId" | "createdAt" | "updatedAt">;
+export type BankAccountFormData = Omit<BankAccount, "id" | "userId" | "createdAt" | "updatedAt"> & {
+  /** NEW — optional starting balance, only used at account creation. Writes a single
+   *  OPENING_BALANCE ledger entry tied to the account (not any income). Never required. */
+  openingBalance?: number;
+};
 
 /**
  * BankAccount enriched with computed balance derived from linked incomes.
@@ -411,6 +404,7 @@ export interface BankAccountWithBalance extends BankAccount {
   incomeCount: number;
   expenseCount: number;
   attributionRate: number; // 0–100%: what % of income has been attributed to expenses
+  outstandingShortfall: number; // NEW — amount currently uncovered by any income (account-level overdraft)
 }
 
 // ─── Expense Income Allocations (FIFO Attribution) ───────────────

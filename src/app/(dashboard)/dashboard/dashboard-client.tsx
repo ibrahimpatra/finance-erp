@@ -16,6 +16,7 @@ import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { ExpensePieChart, MonthlyTrendChart, SpendingByPersonChart } from "@/components/dashboard/expense-chart";
 import { GlobalCurrencyFilter } from "@/components/shared/global-currency-filter";
 import { MigrationBanner } from "@/components/shared/migration-banner";
+import { CurrencySetupBanner } from "@/components/shared/currency-setup-banner";
 
 export function DashboardClient() {
   useIncome();
@@ -27,31 +28,37 @@ export function DashboardClient() {
   useCurrencies();
   const { accounts } = useBankAccounts();
 
-  const { settings }   = useSettingsStore();
+  const { settings, fetched }   = useSettingsStore();
   const { globalCurrency, setGlobalCurrency, setDashboardCurrencyFilter } = useUIStore();
-  const defaultCode    = settings?.currencyCode ?? "KWD";
+  const defaultCode    = settings?.currencyCode ?? "";
 
-  // On first load: default to base currency (not "All")
+  // FIX: wait until settings are actually fetched before touching globalCurrency.
+  // Previously: defaultCode = settings?.currencyCode ?? "KWD" fired during loading
+  // (settings = null) → wrote "KWD" into globalCurrency → when real currency
+  // arrived, !globalCurrency was false so it never updated. Now we wait.
+  // Also corrects the case where "KWD" was written stale and the real currency
+  // is something else — we reset it once fetched.
   useEffect(() => {
-    if (!globalCurrency) {
+    // FIX: wait for BOTH fetched=true AND a real defaultCode.
+    // Previously used `defaultCode || "all"` — for new users with no settings
+    // yet, defaultCode="" so globalCurrency was set to "all". Then when they
+    // picked INR via the banner, the condition `globalCurrency !== "all"`
+    // prevented the update. Now we simply wait until we have a real currency.
+    if (!fetched || !defaultCode) return;
+    if (globalCurrency !== "all") {
       setGlobalCurrency(defaultCode);
     }
-  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetched, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep dashboardCurrencyFilter in sync for single-currency mode.
-  // "all" mode: UIStore.setGlobalCurrency already resets dashboardCurrencyFilter
-  // to "" on switch, so useAnalytics cleanly defaults to base currency with no
-  // stale values causing cross-currency amounts to be added together.
   useEffect(() => {
     if (globalCurrency && globalCurrency !== "all") {
       setDashboardCurrencyFilter(globalCurrency);
     }
-    // "all" → UIStore handled the reset; ChartCurrencySelector drives per-chart selection
   }, [globalCurrency, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const displayLabel = globalCurrency === "all"
     ? "All currencies"
-    : (globalCurrency || defaultCode);
+    : (globalCurrency || defaultCode || "…");
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -66,6 +73,9 @@ export function DashboardClient() {
         </div>
         <GlobalCurrencyFilter />
       </div>
+
+      {/* New-user currency setup — only ever shown when no settings doc exists yet */}
+      <CurrencySetupBanner />
 
       {/* Migration banner — shows once for users with incomes but no accounts yet */}
       <MigrationBanner show={accounts.length === 0} />

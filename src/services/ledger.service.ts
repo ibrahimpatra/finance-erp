@@ -47,6 +47,17 @@ export async function getAllLedgerEntries(userId: string): Promise<LedgerEntry[]
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LedgerEntry));
 }
 
+// NEW — all ledger entries tied to a bank account (used by the shortfall engine
+// and opening-balance display). Filters by accountId, not incomeSourceId.
+export async function getLedgerForAccount(userId: string, accountId: string): Promise<LedgerEntry[]> {
+  const q = query(
+    collection(db, COLLECTIONS.LEDGER(userId)),
+    where("accountId", "==", accountId)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LedgerEntry));
+}
+
 export function calculateBalanceFromLedger(entries: LedgerEntry[]): number {
   return entries.reduce((acc, entry) => {
     return entry.direction === "CREDIT" ? acc + entry.amount : acc - entry.amount;

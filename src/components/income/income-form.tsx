@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { incomeSchema, IncomeSchema } from "@/lib/validations/income";
@@ -30,9 +30,13 @@ export function IncomeForm({
 }: IncomeFormProps) {
   const { sourceTypes } = useIncomeSourceTypes();
   const { currencies }  = useCurrencies();
-  const { settings }    = useSettingsStore();
+  const { settings, fetched } = useSettingsStore();
   const { accounts }    = useBankAccounts();
-  const defaultCode     = settings?.currencyCode ?? "KWD";
+  // FIX: removed ?? "KWD" — if settings haven't loaded yet, defaultCode is ""
+  // and we sync it via useEffect once fetched=true. Using "KWD" caused the form
+  // to initialize with KWD currency for non-KWD users if they opened it before
+  // settings finished loading from Firestore.
+  const defaultCode     = settings?.currencyCode ?? "";
 
   const [showTypeModal, setShowTypeModal] = useState(false);
   const typeLevel = Math.min(modalLevel + 0, 3) as 1 | 2 | 3;
@@ -44,7 +48,7 @@ export function IncomeForm({
     resolver: zodResolver(incomeSchema),
     defaultValues: {
       tagIds:      [],
-      currencyCode: defaultCode,
+      currencyCode: defaultValues?.currencyCode ?? defaultCode,
       accountId:   preselectedAccountId ?? "",
       ...defaultValues,
     },
@@ -52,14 +56,24 @@ export function IncomeForm({
 
   const tagIds        = watch("tagIds") ?? [];
   const selectedAccId = watch("accountId");
+  const watchedCurrency = watch("currencyCode");
   const activeSources = sourceTypes.filter((s) => s.isActive);
+
+  // Sync currency field when settings arrive after the form already mounted.
+  // Only updates if: settings just loaded, no account locks the currency, and
+  // the field is still empty (user hasn't manually chosen).
+  useEffect(() => {
+    if (fetched && defaultCode && !selectedAccId && !watchedCurrency) {
+      setValue("currencyCode", defaultCode);
+    }
+  }, [fetched, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter currencies to match selected account's currency (if an account is picked)
   const selectedAccount = accounts.find((a) => a.id === selectedAccId);
   const allCurrencies = selectedAccount
     ? [{ code: selectedAccount.currencyCode, name: selectedAccount.currencyCode, symbol: "" }]
     : [
-        { code: defaultCode, name: settings?.currencyName ?? "Default", symbol: settings?.currencySymbol ?? "KD" },
+        ...(defaultCode ? [{ code: defaultCode, name: settings?.currencyName ?? defaultCode, symbol: settings?.currencySymbol ?? "" }] : []),
         ...currencies.filter((c) => c.code !== defaultCode),
       ];
 

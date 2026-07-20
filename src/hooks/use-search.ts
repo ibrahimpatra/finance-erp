@@ -15,7 +15,7 @@ export function useSearch(query: string): SearchResult[] {
   const { tags }      = useTagStore();
   const { transfers } = useTransferStore();
   const { settings }  = useSettingsStore();
-  const defaultCode   = settings?.currencyCode ?? "KWD";
+  const defaultCode   = settings?.currencyCode ?? "";
 
   return useMemo(() => {
     if (!query.trim() || query.length < 2) return [];

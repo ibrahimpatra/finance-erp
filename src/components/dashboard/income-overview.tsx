@@ -12,7 +12,7 @@ export function IncomeOverview() {
   const { incomes, loading }  = useIncome();
   const { formatFor }         = useCurrency();
   const { settings }          = useSettingsStore();
-  const defaultCurrency       = settings?.currencyCode ?? "KWD";
+  const defaultCurrency       = settings?.currencyCode ?? "";
   const { globalCurrency }    = useUIStore();
   const { matches, isAll }    = useCurrencyFilter();
 

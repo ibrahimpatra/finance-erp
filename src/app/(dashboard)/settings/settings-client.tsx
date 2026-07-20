@@ -70,9 +70,9 @@ export function SettingsClient() {
     formState: { isSubmitting: settingsSaving } } = useForm<SettingsSchema>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
-      currencyName:   settings?.currencyName   ?? "Kuwaiti Dinar",
-      currencyCode:   settings?.currencyCode   ?? "KWD",
-      currencySymbol: settings?.currencySymbol ?? "KD",
+      currencyName:   settings?.currencyName   ?? "",
+      currencyCode:   settings?.currencyCode   ?? "",
+      currencySymbol: settings?.currencySymbol ?? "",
     },
   });
 
@@ -260,9 +260,9 @@ export function SettingsClient() {
                   onClick={async () => {
                     if (!user) return;
                     await updateSettings(user.uid, {
-                      currencyName:   settings?.currencyName ?? "Kuwaiti Dinar",
-                      currencyCode:   settings?.currencyCode ?? "KWD",
-                      currencySymbol: settings?.currencySymbol ?? "KD",
+                      currencyName:   settings?.currencyName ?? "",
+                      currencyCode:   settings?.currencyCode ?? "",
+                      currencySymbol: settings?.currencySymbol ?? "",
                       attributionMode: mode,
                     });
                     toast(`Attribution set to ${mode === "auto" ? "Auto FIFO" : "Prompt me"}`, "success");
@@ -305,7 +305,7 @@ export function SettingsClient() {
           <p className="text-xs text-muted-foreground mb-2">Add from presets:</p>
           <div className="flex flex-wrap gap-2">
             {PRESET_CURRENCIES.filter((p) =>
-              p.code !== (settings?.currencyCode ?? "KWD") && !currencies.some((c) => c.code === p.code)
+              p.code !== (settings?.currencyCode ?? "") && !currencies.some((c) => c.code === p.code)
             ).map((c) => (
               <button key={c.code} type="button" onClick={() => fillCurForm(c)}
                 className="px-2.5 py-1 rounded-lg text-xs font-medium border border-border hover:bg-muted transition-all">
@@ -358,11 +358,11 @@ export function SettingsClient() {
         <div className="divide-y divide-border">
           <div className="flex items-center gap-3 px-6 py-3.5 bg-blue-50/40">
             <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
-              {settings?.currencySymbol ?? "KD"}
+              {settings?.currencySymbol ?? "—"}
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-foreground">{settings?.currencyName ?? "Kuwaiti Dinar"}</p>
-              <p className="text-xs text-muted-foreground">{settings?.currencyCode ?? "KWD"} · Default</p>
+              <p className="text-sm font-medium text-foreground">{settings?.currencyName ?? "Not set"}</p>
+              <p className="text-xs text-muted-foreground">{settings?.currencyCode ?? "—"} · Default</p>
             </div>
             <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">Default</span>
           </div>

@@ -13,6 +13,7 @@ import { auth, db } from "./config";
 export async function registerUser(email: string, password: string, displayName: string) {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(credential.user, { displayName });
+
   await setDoc(doc(db, "users", credential.user.uid), {
     id: credential.user.uid,
     email,
@@ -20,15 +21,14 @@ export async function registerUser(email: string, password: string, displayName:
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  await setDoc(doc(db, "users", credential.user.uid, "settings", "preferences"), {
-    id: "preferences",
-    userId: credential.user.uid,
-    currencyName: "Kuwaiti Dinar",
-    currencyCode: "KWD",
-    currencySymbol: "KD",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+
+  // FIX (#3): no longer pre-assigns KWD (or any currency) for new users —
+  // the settings doc is intentionally NOT created here. The new-user currency
+  // banner (shown only when settings.fetched === true && settings === null)
+  // prompts them to pick their own currency on first visit. This ONLY affects
+  // brand-new signups going forward — every existing user already has a
+  // settings document and this code path never runs for them again.
+
   return credential.user;
 }
 

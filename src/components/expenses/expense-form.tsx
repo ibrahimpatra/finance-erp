@@ -40,9 +40,10 @@ export function ExpenseForm({
   const { expenseTypes }  = useExpenseTypes();
   const { accounts }      = useBankAccounts();
   const { formatFor }     = useCurrency();
-  const { settings }      = useSettingsStore();
+  const { settings, fetched } = useSettingsStore();
   const { toast }         = useToast();
-  const defaultCode       = settings?.currencyCode ?? "KWD";
+  // FIX: removed ?? "KWD" — synced via useEffect once settings are fetched
+  const defaultCode       = settings?.currencyCode ?? "";
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showIncomeModal,   setShowIncomeModal]   = useState(false);

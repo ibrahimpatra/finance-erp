@@ -10,7 +10,9 @@ import { useTagStore } from "@/stores/tag.store";
 import { useExpenseTypeStore } from "@/stores/expense-type.store";
 import { useIncomeSourceTypeStore } from "@/stores/income-source-type.store";
 import { useTransferStore } from "@/stores/transfer.store";
+import { useBankAccountStore } from "@/stores/bank-account.store";
 import { useIncome } from "@/hooks/use-income";
+import { useBankAccounts } from "@/hooks/use-bank-accounts";
 import { useSettingsStore } from "@/stores/settings.store";
 import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/components/ui/toaster";
@@ -19,16 +21,18 @@ import { IncomeForm } from "@/components/income/income-form";
 import { CategoryForm } from "@/components/shared/category-form";
 import { IncomeTypeForm } from "@/components/shared/income-type-form";
 import { TagForm } from "@/components/shared/tag-form";
+import { AccountForm } from "@/components/bank-accounts/account-form";
 import { FormDrawer } from "@/components/shared/form-drawer";
 import { ExpenseSchema } from "@/lib/validations/expense";
 import { IncomeSchema } from "@/lib/validations/income";
 import { tagSchema, TagSchema } from "@/lib/validations/tag";
 import { expenseTypeSchema, ExpenseTypeSchema } from "@/lib/validations/expense-type";
 import { transferSchema, TransferSchema } from "@/lib/validations/transfer";
-import { TAG_COLORS } from "@/types";
+import { BankAccountSchema } from "@/lib/validations/bank-account";
+import { TAG_COLORS, BankAccountFormData } from "@/types";
 import {
   Plus, Receipt, TrendingUp, ArrowLeftRight,
-  Tag, Layers, Briefcase, Loader2,
+  Tag, Layers, Briefcase, Loader2, Landmark,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -37,6 +41,7 @@ const inp = "w-full px-3.5 py-2.5 rounded-lg border border-input bg-background t
 const ACTIONS = [
   { id: "expense",    label: "Expense",      icon: Receipt,        bg: "bg-red-500",     ring: "ring-red-500/30" },
   { id: "income",     label: "Income",       icon: TrendingUp,     bg: "bg-emerald-500", ring: "ring-emerald-500/30" },
+  { id: "account",    label: "Account",      icon: Landmark,       bg: "bg-teal-500",    ring: "ring-teal-500/30" },
   { id: "transfer",   label: "Transfer",     icon: ArrowLeftRight, bg: "bg-amber-500",   ring: "ring-amber-500/30" },
   { id: "tag",        label: "Tag",          icon: Tag,            bg: "bg-purple-500",  ring: "ring-purple-500/30" },
   { id: "category",   label: "Category",     icon: Layers,         bg: "bg-indigo-500",  ring: "ring-indigo-500/30" },
@@ -54,11 +59,13 @@ export function QuickAddFAB() {
   const { addTag }       = useTagStore();
   const { addExpenseType }  = useExpenseTypeStore();
   const { addSourceType }   = useIncomeSourceTypeStore();
+  const { addAccount }      = useBankAccountStore();
+  const { accounts }        = useBankAccounts();
   const { settings }     = useSettingsStore();
   const { incomes }      = useIncome();
   const { formatFor }    = useCurrency();
   const { toast }        = useToast();
-  const defaultCode      = settings?.currencyCode ?? "KWD";
+  const defaultCode      = settings?.currencyCode ?? "";
 
   // ── Form stack: supports back-navigation between forms ────────
   const [formStack, setFormStack] = useState<ActionId[]>([]);
@@ -70,6 +77,20 @@ export function QuickAddFAB() {
     setMenuOpen(false);
     setFormStack((s) => (s.includes(id) ? s : [...s, id]));
   }, []);
+
+  // FIX (Phase 3.3): if bank accounts exist, the expense form resolves its
+  // income source via FIFO from the selected account — a stale
+  // smartDefaults.incomeSourceId from before account migration would
+  // otherwise pre-fill an income that doesn't belong to the chosen account,
+  // leaving the dropdown empty/confusing. Clear it specifically when opening
+  // the expense form in account mode; every other smart default is untouched.
+  const openExpenseForm = useCallback(() => {
+    if (accounts.length > 0 && smartDefaults.incomeSourceId) {
+      useUIStore.getState().setSmartDefaults({ ...smartDefaults, incomeSourceId: undefined });
+    }
+    openForm("expense");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts.length, smartDefaults, openForm]);
 
   // Pop the top form — reveals the one below if any
   const closeTop = useCallback(() => {
@@ -158,6 +179,15 @@ export function QuickAddFAB() {
     } catch (e: unknown) { toast((e as Error).message, "error"); }
   };
 
+  const onAccount = async (data: BankAccountSchema) => {
+    if (!user) return;
+    try {
+      await addAccount(user.uid, data as BankAccountFormData);
+      toast("Account created!", "success");
+      closeTop();
+    } catch (e: unknown) { toast((e as Error).message, "error"); }
+  };
+
   return (
     <>
       {/* Speed-dial + button: only when no drawer is open */}
@@ -178,7 +208,7 @@ export function QuickAddFAB() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.9 }}
                       transition={{ delay: i * 0.04, type: "spring", damping: 20 }}
-                      onClick={() => openForm(id)}
+                      onClick={() => id === "expense" ? openExpenseForm() : openForm(id)}
                       className="flex items-center gap-3 self-end">
                       <span className="bg-white text-xs font-semibold text-foreground px-3 py-1.5 rounded-full shadow-md border border-border">
                         {label}
@@ -222,6 +252,11 @@ export function QuickAddFAB() {
 
       <FormDrawer isOpen={activeForm === "income"} onClose={closeTop} title="Add Income Source">
         <IncomeForm onSubmit={onIncome} onCancel={closeTop} submitLabel="Add Income" />
+      </FormDrawer>
+
+      {/* Account — NEW (Phase 8) */}
+      <FormDrawer isOpen={activeForm === "account"} onClose={closeTop} title="New Bank Account">
+        <AccountForm onSubmit={onAccount} onCancel={closeTop} submitLabel="Create Account" />
       </FormDrawer>
 
       <FormDrawer isOpen={activeForm === "transfer"} onClose={closeTop} title="New Transfer">

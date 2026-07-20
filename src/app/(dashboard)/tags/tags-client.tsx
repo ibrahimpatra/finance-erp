@@ -29,17 +29,19 @@ export function TagsPageClient() {
   const { tags, loading } = useTags();
   const { expenses } = useExpenses();
   const { incomes }  = useIncome();
-  const { settings } = useSettingsStore();
-  const defaultCode  = settings?.currencyCode ?? "KWD";
+  const { settings, fetched } = useSettingsStore();
+  const defaultCode  = settings?.currencyCode ?? "";
   useCurrencies();
   const { addTag, editTag, removeTag } = useTagStore();
   const { globalCurrency, setGlobalCurrency } = useUIStore();
   const { toast }      = useToast();
 
-  // Default to base currency on first load (not "All")
   useEffect(() => {
-    if (!globalCurrency) setGlobalCurrency(defaultCode);
-  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!fetched || !defaultCode) return;
+    if (globalCurrency !== "all") {
+      setGlobalCurrency(defaultCode);
+    }
+  }, [fetched, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { matches: matchesCurrency } = useCurrencyFilter();
 

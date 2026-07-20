@@ -9,8 +9,8 @@ export function useExpenses(filters?: ExpenseFilters) {
   const store = useExpenseStore();
 
   useEffect(() => {
-    if (user?.uid) store.fetchExpenses(user.uid, filters);
-  }, [user?.uid]);
+    if (user?.uid && !store.loading) store.fetchExpenses(user.uid, filters);
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return store;
 }

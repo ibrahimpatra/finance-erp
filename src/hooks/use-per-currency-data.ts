@@ -38,10 +38,10 @@ export function usePerCurrencyData(): {
   const { incomes }    = useIncomeStore();
   const { expenses }   = useExpenseStore();
   const { currencies } = useCurrencyStore();
-  const { settings }   = useSettingsStore();
+  const { settings, fetched }   = useSettingsStore();
   const { globalCurrency } = useUIStore();
 
-  const defaultCode = settings?.currencyCode ?? "KWD";
+  const defaultCode = settings?.currencyCode ?? "";
 
   /**
    * allCodes = union of:
@@ -54,13 +54,14 @@ export function usePerCurrencyData(): {
    * the stats cards and the filter chips always show identical currency lists.
    */
   const allCodes = useMemo(() => {
+    if (!fetched || !defaultCode) return [];
     const set = new Set<string>();
     set.add(defaultCode);
     currencies.forEach((c) => set.add(c.code));
     incomes.forEach((i)  => { if (i.currencyCode) set.add(i.currencyCode); });
     expenses.forEach((e) => { if (e.currencyCode) set.add(e.currencyCode); });
     return Array.from(set).sort();
-  }, [defaultCode, currencies, incomes, expenses]);
+  }, [fetched, defaultCode, currencies, incomes, expenses]);
 
   // Which codes to compute rows for
   const targetCodes = useMemo(() => {

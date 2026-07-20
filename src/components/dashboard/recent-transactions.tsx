@@ -17,7 +17,7 @@ export function RecentTransactions() {
   const { expenseTypes }     = useExpenseTypes();
   const { formatFor }        = useCurrency();
   const { settings }         = useSettingsStore();
-  const defaultCurrency      = settings?.currencyCode ?? "KWD";
+  const defaultCurrency      = settings?.currencyCode ?? "";
 
   // Use global currency filter (not the old dashboardCurrencyFilter)
   const { matches } = useCurrencyFilter();

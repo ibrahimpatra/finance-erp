@@ -15,6 +15,9 @@ export const bankAccountSchema = z.object({
   isActive:       z.boolean().default(true),
   isDefault:      z.boolean().default(false),
   notes:          z.string().max(300).optional(),
+  // NEW (#4) — optional starting balance, only used at account creation.
+  // Can be negative (e.g. starting with a known overdraft/credit balance).
+  openingBalance: z.coerce.number().optional(),
 });
 
 export type BankAccountSchema = z.infer<typeof bankAccountSchema>;

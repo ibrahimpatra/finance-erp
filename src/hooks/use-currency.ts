@@ -8,22 +8,23 @@ export function useCurrency() {
   const { settings } = useSettingsStore();
   const { currencies } = useCurrencyStore();
 
-  const symbol = settings?.currencySymbol ?? "KD";
-  const code   = settings?.currencyCode   ?? "KWD";
-  const name   = settings?.currencyName   ?? "Kuwaiti Dinar";
+  // FIX: removed ?? "KWD" / ?? "KD" / ?? "Kuwaiti Dinar" hardcoded fallbacks.
+  // These fired while settings was null (loading) and caused every format()
+  // call to display KWD amounts until settings arrived. Now we use empty
+  // strings — callers using formatFor() with an explicit code are unaffected.
+  // The format() (base currency) function returns a neutral placeholder ("…")
+  // during the brief loading window rather than showing the wrong currency.
+  const symbol = settings?.currencySymbol ?? "";
+  const code   = settings?.currencyCode   ?? "";
+  const name   = settings?.currencyName   ?? "";
 
-  /**
-   * Format amount using the app's default currency.
-   */
-  const format = (amount: number) => formatCurrency(amount, symbol, code);
+  const format = (amount: number) =>
+    code ? formatCurrency(amount, symbol, code) : `… ${amount}`;
 
-  /**
-   * Format amount using an explicit currencyCode.
-   * Falls back to default if currencyCode is undefined or matches default.
-   * Looks up user-defined currencies first, then PRESET_CURRENCIES, then raw code.
-   */
   const formatFor = (amount: number, currencyCode?: string) => {
-    if (!currencyCode || currencyCode === code) return formatCurrency(amount, symbol, code);
+    if (!currencyCode || currencyCode === code) {
+      return code ? formatCurrency(amount, symbol, code) : `… ${amount}`;
+    }
     const userCur = currencies.find((c) => c.code === currencyCode);
     if (userCur) return formatCurrency(amount, userCur.symbol, userCur.code);
     const preset = PRESET_CURRENCIES.find((c) => c.code === currencyCode);
@@ -32,7 +33,6 @@ export function useCurrency() {
     return `${currencyCode} ${amount.toFixed(is3Decimal ? 3 : 2)}`;
   };
 
-  /** Return just the symbol for a given currency code */
   const symbolFor = (currencyCode?: string) => {
     if (!currencyCode || currencyCode === code) return symbol;
     const userCur = currencies.find((c) => c.code === currencyCode);

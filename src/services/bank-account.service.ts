@@ -20,6 +20,8 @@ import {
   IncomeWithBalance,
 } from "@/types";
 import { logAudit } from "./audit.service";
+import { createLedgerEntry } from "./ledger.service";
+import { reconcileAccountShortfalls } from "./shortfall.service";
 
 // ── CRUD ──────────────────────────────────────────────────────────
 
@@ -43,12 +45,29 @@ export async function getBankAccount(
 export async function createBankAccount(
   userId: string, data: BankAccountFormData
 ): Promise<string> {
+  const { openingBalance, ...accountFields } = data;
+
   const ref = await addDoc(collection(db, COLLECTIONS.BANK_ACCOUNTS(userId)), {
-    ...data,
+    ...accountFields,
     userId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  // NEW (#4): optional opening balance — writes a single OPENING_BALANCE ledger
+  // entry tied to the account. Does NOT touch any income (no incomeSourceId),
+  // so it never affects an existing income's balance. Purely additive.
+  if (openingBalance && openingBalance !== 0) {
+    await createLedgerEntry({
+      userId,
+      transactionType: "OPENING_BALANCE",
+      accountId:       ref.id,
+      amount:          Math.abs(openingBalance),
+      direction:       openingBalance > 0 ? "CREDIT" : "DEBIT",
+      description:     `Opening balance: ${openingBalance > 0 ? "+" : "-"}${Math.abs(openingBalance).toFixed(3)}`,
+    });
+  }
+
   await logAudit(userId, "CREATE", "bankAccount", ref.id, undefined, data);
   return ref.id;
 }
@@ -110,15 +129,22 @@ export async function deleteBankAccount(
  */
 export function computeAccountWithBalance(
   account: BankAccount,
-  incomesWithBalance: IncomeWithBalance[]
+  incomesWithBalance: IncomeWithBalance[],
+  outstandingShortfall: number = 0,
+  openingBalanceAdjustment: number = 0
 ): BankAccountWithBalance {
   const linked = incomesWithBalance.filter((i) => i.accountId === account.id);
 
   const totalIncome   = linked.reduce((s, i) => s + i.totalCredits, 0);
-  // FIX: was i.totalDebits — that includes transfer amounts, inflating "total spent".
-  // i.totalExpenses is computed in income.service from EXPENSE_CREATED debits only.
   const totalExpenses = linked.reduce((s, i) => s + i.totalExpenses, 0);
-  const balance       = linked.reduce((s, i) => s + i.balance, 0);
+
+  // FIX (#7): balance now also reflects the optional opening balance and
+  // subtracts any outstanding account-level shortfall — so an account with
+  // an under-funded expense correctly shows as overdrawn, even though every
+  // individual income underneath it stays >= 0.
+  const balance = linked.reduce((s, i) => s + i.balance, 0)
+    + openingBalanceAdjustment
+    - outstandingShortfall;
 
   const attributionRate = totalIncome > 0
     ? Math.min(100, Math.round((totalExpenses / totalIncome) * 100))
@@ -129,12 +155,23 @@ export function computeAccountWithBalance(
     balance,
     totalIncome,
     totalExpenses,
-    // FIX: was counting income sources with any debits (wrong metric entirely).
-    // Now counts the actual number of income entries linked to this account.
     incomeCount:     linked.length,
     expenseCount:    0,   // not computable here without expense data; not displayed in UI
     attributionRate,
+    outstandingShortfall,
   };
+}
+
+/**
+ * "Recompute" — catch-up reconciliation for one account. Never destructive:
+ * only ever adds new SHORTFALL_RESOLVED ledger entries if it finds income
+ * balance that could cover an outstanding shortfall but never auto-applied.
+ * Safe to call repeatedly; a clean account is always a no-op.
+ */
+export async function reconcileAccount(
+  userId: string, accountId: string, incomeIds: string[]
+): Promise<{ resolvedCount: number; totalResolved: number }> {
+  return reconcileAccountShortfalls(userId, accountId, incomeIds);
 }
 
 export async function getBankAccountsWithBalances(

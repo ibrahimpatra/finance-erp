@@ -22,7 +22,7 @@ export function TimelineClient() {
   useIncome(); useExpenses(); useTransfers();
 
   const { settings }   = useSettingsStore();
-  const defaultCode    = settings?.currencyCode ?? "KWD";
+  const defaultCode    = settings?.currencyCode ?? "";
   const { formatFor }  = useCurrency();
   const { matches }    = useCurrencyFilter();
 

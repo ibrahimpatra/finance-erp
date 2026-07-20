@@ -17,9 +17,9 @@ export function useAnalytics() {
   const { tags }         = useTagStore();
   const { expenseTypes } = useExpenseTypeStore();
   const { globalCurrency, dashboardCurrencyFilter } = useUIStore();
-  const { settings }     = useSettingsStore();
+  const { settings, fetched }     = useSettingsStore();
 
-  const defaultCurrency = settings?.currencyCode ?? "KWD";
+  const defaultCurrency = settings?.currencyCode ?? "";
 
   // ── "All" mode detection ────────────────────────────────────────
   // isAllMode = user selected "All" in the global currency filter.

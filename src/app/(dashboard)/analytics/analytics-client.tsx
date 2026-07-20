@@ -24,31 +24,23 @@ import { getInitials } from "@/lib/utils/helpers";
 export function AnalyticsClient() {
   useIncome(); useExpenses(); useSpentBy(); useTags(); useExpenseTypes(); useCurrencies();
 
-  const { settings }  = useSettingsStore();
-  const defaultCode   = settings?.currencyCode ?? "KWD";
+  const { settings, fetched }  = useSettingsStore();
+  const defaultCode   = settings?.currencyCode ?? "";
   const { globalCurrency, setGlobalCurrency, setDashboardCurrencyFilter } = useUIStore();
 
-  // ── Init default currency on first load ──────────────────────────
   useEffect(() => {
-    if (!globalCurrency) {
+    if (!fetched || !defaultCode) return;
+    if (globalCurrency !== "all") {
       setGlobalCurrency(defaultCode);
     }
-  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetched, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Keep chart filter in sync with global selector ───────────────
-  // FIX: when "all" is selected UIStore.setGlobalCurrency already resets
-  // dashboardCurrencyFilter to "" (fixed in ui.store.ts). This effect
-  // handles the case where defaultCode changes (e.g., settings update).
   useEffect(() => {
     if (globalCurrency && globalCurrency !== "all") {
-      // Single currency mode — keep chart filter in sync
       setDashboardCurrencyFilter(globalCurrency);
-    } else if (!globalCurrency) {
-      // Not yet initialised — seed with base
+    } else if (!globalCurrency && defaultCode) {
       setDashboardCurrencyFilter(defaultCode);
     }
-    // "all" mode: setGlobalCurrency already cleared dashboardCurrencyFilter,
-    // ChartCurrencySelector lets the user switch per-chart currency.
   }, [globalCurrency, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Data ─────────────────────────────────────────────────────────

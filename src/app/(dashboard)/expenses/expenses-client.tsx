@@ -36,18 +36,18 @@ export function ExpensesPageClient() {
   const { tags } = useTags();
   useCurrencies();
   const { formatFor }  = useCurrency();
-  const { settings }   = useSettingsStore();
-  const defaultCode    = settings?.currencyCode ?? "KWD";
+  const { settings, fetched }   = useSettingsStore();
+  const defaultCode    = settings?.currencyCode ?? "";
   const { globalCurrency, setGlobalCurrency } = useUIStore();
   const { toast }      = useToast();
   const { openQuickAdd } = useUIStore();
 
-  // ── Global currency filter ────────────────────────────────────
-
-  // Default to base currency on first load (not "All")
   useEffect(() => {
-    if (!globalCurrency) setGlobalCurrency(defaultCode);
-  }, [defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!fetched || !defaultCode) return;
+    if (globalCurrency !== "all") {
+      setGlobalCurrency(defaultCode);
+    }
+  }, [fetched, defaultCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { matches: matchesCurrency } = useCurrencyFilter();
 

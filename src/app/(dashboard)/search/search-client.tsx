@@ -26,7 +26,7 @@ export function SearchClient() {
   const results = useSearch(query);
   const { formatFor } = useCurrency();
   const { settings }  = useSettingsStore();
-  const defaultCode   = settings?.currencyCode ?? "KWD";
+  const defaultCode   = settings?.currencyCode ?? "";
 
   const grouped = results.reduce((acc, r) => {
     if (!acc[r.type]) acc[r.type] = [];

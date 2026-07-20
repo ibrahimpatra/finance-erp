@@ -78,10 +78,14 @@ service cloud.firestore {
       }
       // ── Expense Income Allocations (FIFO attribution — display only) ──
       // Allow delete so FIFO can clear and re-run; update blocked (immutable once set).
+      // FIX (Phase 3): added resource.data.userId check — was missing, meaning
+      // any authenticated user who somehow had a document ID could delete
+      // another user's allocation record. Now matches the pattern used by
+      // every other rule in this file.
       match /expenseIncomeAllocations/{docId} {
         allow read: if isOwner(userId);
         allow create: if isOwner(userId) && hasValidUserId(userId);
-        allow delete: if isOwner(userId);
+        allow delete: if isOwner(userId) && resource.data.userId == userId;
         allow update: if false;
       }
     }

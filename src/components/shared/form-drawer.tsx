@@ -25,10 +25,26 @@ export function FormDrawer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  /* Lock body scroll */
+  /* Lock body scroll — FIX (Phase 3): previously any single drawer closing
+     would unconditionally restore scroll, even if ANOTHER drawer (e.g. an
+     inline "+ New Tag" or "+ New Account" modal opened on top) was still
+     open. Now checks the shared drawerCount before restoring, so the body
+     stays locked until the LAST open drawer closes. */
   useEffect(() => {
-    document.body.style.overflow = isOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      if (isOpen) {
+        // Defer so openDrawer/closeDrawer from the effect above has
+        // already updated drawerCount by the time we check it.
+        setTimeout(() => {
+          if (useUIStore.getState().drawerCount === 0) {
+            document.body.style.overflow = "";
+          }
+        }, 0);
+      }
+    };
   }, [isOpen]);
 
   /* Escape key */

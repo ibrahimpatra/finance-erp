@@ -22,13 +22,14 @@ const inp = "form-input";
 export function TransfersPageClient() {
   const { user }       = useAuthStore();
   const { transfers, loading } = useTransfers();
-  const { incomes }    = useIncome();
+  const { incomes, loading: incomesLoading } = useIncome();
   const { addTransfer } = useTransferStore();
   const { settings }   = useSettingsStore();
   const { formatFor }  = useCurrency();
   const { matches }    = useCurrencyFilter();
   const { toast }      = useToast();
-  const defaultCode    = settings?.currencyCode ?? "KWD";
+  // FIX: removed ?? "KWD" — no hardcoded currency assumptions
+  const defaultCode    = settings?.currencyCode ?? "";
   const [showForm, setShowForm] = useState(false);
 
   // Filter transfers list by the global currency selector (fromCurrencyCode is the source currency)
@@ -172,10 +173,19 @@ export function TransfersPageClient() {
 
           {/* From / To */}
           <div className="grid grid-cols-1 gap-4">
+            {/* Loading state — shown on mobile when incomes haven't loaded yet */}
+            {incomesLoading && incomes.length === 0 && (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted text-sm text-muted-foreground">
+                <span className="animate-spin text-xs">⟳</span> Loading income sources…
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">From *</label>
-              <select {...register("fromIncomeId")} className={inp}>
-                <option value="">Select source…</option>
+              <select {...register("fromIncomeId")} className={inp}
+                disabled={incomesLoading && incomes.length === 0}>
+                <option value="">
+                  {incomesLoading && incomes.length === 0 ? "Loading…" : "Select source…"}
+                </option>
                 {incomes.map((i) => {
                   const cur = i.currencyCode || defaultCode;
                   return (
@@ -196,8 +206,11 @@ export function TransfersPageClient() {
 
             <div className="space-y-1.5">
               <label className="text-sm font-medium">To *</label>
-              <select {...register("toIncomeId")} className={inp}>
-                <option value="">Select destination…</option>
+              <select {...register("toIncomeId")} className={inp}
+                disabled={incomesLoading && incomes.length === 0}>
+                <option value="">
+                  {incomesLoading && incomes.length === 0 ? "Loading…" : "Select destination…"}
+                </option>
                 {incomes.map((i) => {
                   const cur = i.currencyCode || defaultCode;
                   return (
